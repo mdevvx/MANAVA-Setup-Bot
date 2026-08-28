@@ -50,13 +50,36 @@ class HelpCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="Leaderboards — everyone",
+            value=(
+                "`/leaderboard squads` — global squad leaderboard, ranked by season XP\n"
+                "`/leaderboard squad squad_name:<optional>` — a squad's member leaderboard "
+                "(defaults to your own squad)"
+            ),
+            inline=False,
+        )
+        embed.add_field(
             name="Admin commands — Admin / MANAVA Team only",
             value=(
                 "`/admin set-verified user:<@user> verified:<true|false>` — mark a user as a "
                 "verified MANAVA player\n"
                 "`/admin add-xp user:<@user> amount:<n>` — manually grant Personal Lifetime XP to a user\n"
+                "`/admin link-manava-account user:<@user> manava_user_id:<...>` — link a Discord "
+                "user to their MANAVA account\n"
                 "`!sync` — message command, not slash — re-syncs slash commands and re-checks "
                 "required roles/categories/permissions without restarting the bot"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="XP configuration — Admin / MANAVA Team only",
+            value=(
+                "`/xpconfig view` — show current XP amounts, level thresholds, and settings\n"
+                "`/xpconfig set-xp key:<...> value:<n>` — update an XP amount\n"
+                "`/xpconfig set-threshold level:<2-7> value:<n>` — update a squad level's XP threshold\n"
+                "`/xpconfig exclude-channel channel:<#channel> excluded:<true|false>` — include/exclude "
+                "a channel from granting text XP\n"
+                "`/xpconfig simulate-manava-event ...` — test the MANAVA event pipeline directly"
             ),
             inline=False,
         )

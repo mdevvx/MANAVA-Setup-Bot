@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
+from src import constants
 from src.config import BotConfig
+from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import squads as squads_repo
 from src.discord_state import provisioning
 from src.discord_state.role_resolver import ResolvedGuildState, resolve_guild_state
+from src.discord_state.xp_channel_filter import is_message_xp_eligible, is_within_cooldown
 from src.errors import BotUserError, DiscordSetupError
-from src.services import xp_stub_service
+from src.services import xp_service
+from src.web.polling import ManavaPollingTask
+from src.web.webhook_server import ManavaWebhookServer
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +28,8 @@ class ManavaBot(commands.Bot):
         intents = discord.Intents.default()
         intents.members = True
         # message_content is a privileged intent — needed to parse the "!sync"
-        # message command, and Phase 2's real +15/10-char XP rule will need it
-        # too. Must also be turned on in the Discord Developer Portal under
+        # message command and the real Discord text-XP rule (10-char minimum).
+        # Must also be turned on in the Discord Developer Portal under
         # Bot -> Privileged Gateway Intents -> Message Content Intent, or the
         # gateway connection will be rejected even with this set.
         intents.message_content = True
@@ -31,6 +37,10 @@ class ManavaBot(commands.Bot):
         self.config = config
         self.db_pool = db_pool
         self.guild_state: ResolvedGuildState | None = None
+        self.xp_excluded_channel_ids: set[int] = set()
+        self._xp_cooldowns: dict[int, float] = {}
+        self.webhook_server = ManavaWebhookServer(self)
+        self.polling_task = ManavaPollingTask(self)
         # discord.py's documented pattern for a custom tree-wide error handler;
         # the type stubs don't reflect that this attribute is assignable.
         self.tree.on_error = self.on_app_command_error  # type: ignore[method-assign]
@@ -39,10 +49,17 @@ class ManavaBot(commands.Bot):
         await self.load_extension("src.cogs.squads")
         await self.load_extension("src.cogs.admin")
         await self.load_extension("src.cogs.help")
+        await self.load_extension("src.cogs.xp")
         guild_obj = discord.Object(id=self.config.guild_id)
         self.tree.copy_global_to(guild=guild_obj)
         await self.tree.sync(guild=guild_obj)
         self.purge_archived_squads.start()
+        await self.webhook_server.start()
+
+    async def close(self) -> None:
+        await self.webhook_server.stop()
+        self.polling_task.stop()
+        await super().close()
 
     async def on_ready(self) -> None:
         guild = self.get_guild(self.config.guild_id)
@@ -57,7 +74,23 @@ class ManavaBot(commands.Bot):
         except DiscordSetupError as exc:
             self.guild_state = None
             logger.error("Squad features disabled until this is fixed: %s", exc.user_message)
+
+        await self.refresh_bot_config_cache()
         logger.info("Logged in as %s (%s)", self.user, self.user.id if self.user else "?")
+
+    async def refresh_bot_config_cache(self) -> None:
+        """Reloads bot_config-backed in-memory state: the XP channel exclusion
+        list, and starts/stops the MANAVA REST-polling fallback according to
+        the configured integration mode. Safe to call anytime (e.g. !sync)."""
+        async with self.db_pool.acquire() as conn:
+            self.xp_excluded_channel_ids = await bot_config_repo.get_excluded_channel_ids(conn)
+            mode = await bot_config_repo.get_value(
+                conn, constants.BOT_CONFIG_KEY_MANAVA_INTEGRATION_MODE, constants.MANAVA_INTEGRATION_MODE_WEBHOOK
+            )
+        if mode == constants.MANAVA_INTEGRATION_MODE_POLLING:
+            self.polling_task.start()
+        else:
+            self.polling_task.stop()
 
     def require_guild_state(self) -> ResolvedGuildState:
         if self.guild_state is None:
@@ -68,16 +101,35 @@ class ManavaBot(commands.Bot):
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.guild is None:
+            await self.process_commands(message)
             return
-        try:
-            async with self.db_pool.acquire() as conn:
-                await xp_stub_service.record_message_activity(conn, message.author.id)
-        except Exception:
-            logger.exception("Failed to record STUB message XP for %s", message.author.id)
+        await self._maybe_grant_text_xp(message)
         # Required for prefix/message commands (e.g. "!sync") to dispatch at
         # all — overriding on_message fully replaces discord.py's default
         # dispatch, which normally calls this for you.
         await self.process_commands(message)
+
+    async def _maybe_grant_text_xp(self, message: discord.Message) -> None:
+        if len(message.content.strip()) < constants.DISCORD_TEXT_XP_MIN_CHARS:
+            return
+        if not is_message_xp_eligible(message, self.xp_excluded_channel_ids):
+            return
+
+        now = time.monotonic()
+        last_grant = self._xp_cooldowns.get(message.author.id)
+        if is_within_cooldown(last_grant, now, constants.DISCORD_TEXT_XP_COOLDOWN_SECONDS):
+            return
+        # Set the cooldown BEFORE awaiting the DB call, so two messages sent
+        # back-to-back can't both slip through while the first write is still
+        # in flight (a single Discord message can never grant XP more than
+        # once — this is the guard for that within one process).
+        self._xp_cooldowns[message.author.id] = now
+
+        try:
+            async with self.db_pool.acquire() as conn:
+                await xp_service.grant_personal_xp(conn, message.author.id, constants.DISCORD_TEXT_XP_AMOUNT)
+        except Exception:
+            logger.exception("Failed to grant Discord text XP to %s", message.author.id)
 
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

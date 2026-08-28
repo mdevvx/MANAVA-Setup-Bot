@@ -22,6 +22,7 @@ from src.errors import (
     SquadNotFoundError,
 )
 from src.models.squad import Squad, SquadJoinRequest, SquadMembership, SquadRole
+from src.services import squad_xp_service
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ async def approve_join_request(
     if existing is not None:
         await join_requests_repo.decide_request(conn, request_id, approved=False, decided_by=approver.id)
         raise AlreadyInSquadError()
+    await squad_xp_service.ensure_capacity_for_new_member(conn, squad.id)
 
     try:
         membership = await memberships_repo.add_member(conn, squad.id, applicant.id)
@@ -128,6 +130,7 @@ async def invite_member(
     existing = await memberships_repo.get_active_membership(conn, invitee.id)
     if existing is not None:
         raise AlreadyInSquadError()
+    await squad_xp_service.ensure_capacity_for_new_member(conn, squad.id)
     try:
         membership = await memberships_repo.add_member(conn, squad.id, invitee.id)
     except asyncpg.UniqueViolationError as exc:

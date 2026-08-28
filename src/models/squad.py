@@ -48,6 +48,7 @@ class SquadMembership:
     squad_role: SquadRole
     joined_at: datetime
     left_at: datetime | None
+    contributed_xp: int
 
 
 @dataclass(frozen=True, slots=True)

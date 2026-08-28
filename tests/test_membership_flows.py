@@ -37,6 +37,7 @@ def _fake_membership(squad_id, user_id, role: SquadRole) -> SquadMembership:
         squad_role=role,
         joined_at=None,  # type: ignore[arg-type]
         left_at=None,
+        contributed_xp=0,
     )
 
 

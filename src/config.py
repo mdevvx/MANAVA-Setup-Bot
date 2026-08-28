@@ -29,6 +29,11 @@ def _optional_int(name: str, default: int) -> int:
         raise ConfigError(f"Environment variable {name} must be an integer, got: {raw!r}") from exc
 
 
+def _optional(name: str) -> str | None:
+    value = os.environ.get(name)
+    return value if value else None
+
+
 @dataclass(frozen=True, slots=True)
 class BotConfig:
     discord_token: str
@@ -36,6 +41,14 @@ class BotConfig:
     database_url: str
     log_level: str
     squad_archive_days: int
+    # STUB: real endpoint/credentials pending from MANAVA. If unset, the
+    # webhook server simply doesn't start (see src/web/webhook_server.py) —
+    # the /admin simulate-manava-event test harness works regardless.
+    manava_webhook_secret: str | None
+    webhook_port: int
+    manava_poll_url: str | None
+    manava_poll_api_key: str | None
+    manava_poll_interval_seconds: int
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -45,4 +58,9 @@ class BotConfig:
             database_url=_require("DATABASE_URL"),
             log_level=os.environ.get("LOG_LEVEL", "INFO"),
             squad_archive_days=_optional_int("SQUAD_ARCHIVE_DAYS", 30),
+            manava_webhook_secret=_optional("MANAVA_WEBHOOK_SECRET"),
+            webhook_port=_optional_int("PORT", 8080),
+            manava_poll_url=_optional("MANAVA_POLL_URL"),
+            manava_poll_api_key=_optional("MANAVA_POLL_API_KEY"),
+            manava_poll_interval_seconds=_optional_int("MANAVA_POLL_INTERVAL_SECONDS", 300),
         )

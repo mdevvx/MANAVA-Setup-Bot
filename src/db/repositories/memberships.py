@@ -15,6 +15,7 @@ def _row_to_membership(row: asyncpg.Record) -> SquadMembership:
         squad_role=SquadRole(row["squad_role"]),
         joined_at=row["joined_at"],
         left_at=row["left_at"],
+        contributed_xp=row["contributed_xp"],
     )
 
 
@@ -55,6 +56,47 @@ async def count_officers(conn: asyncpg.Connection, squad_id: UUID) -> int:
     )
     assert row is not None
     return int(row["cnt"])
+
+
+async def count_active_members(conn: asyncpg.Connection, squad_id: UUID) -> int:
+    row = await conn.fetchrow(
+        "select count(*) as cnt from squad_memberships where squad_id = $1 and left_at is null",
+        squad_id,
+    )
+    assert row is not None
+    return int(row["cnt"])
+
+
+async def add_contributed_xp(conn: asyncpg.Connection, membership_id: UUID, amount: int) -> None:
+    await conn.execute(
+        "update squad_memberships set contributed_xp = contributed_xp + $2 where id = $1",
+        membership_id,
+        amount,
+    )
+
+
+async def get_member_leaderboard(conn: asyncpg.Connection, squad_id: UUID) -> list[asyncpg.Record]:
+    """Active members of one squad, ranked by their contribution to THIS
+    squad — single query, no N+1, safe even for a max-capacity (1000-member)
+    squad."""
+    return list(
+        await conn.fetch(
+            """
+            select
+                m.discord_user_id,
+                m.squad_role,
+                m.contributed_xp,
+                coalesce(px.lifetime_xp, 0) as personal_lifetime_xp,
+                coalesce(px.season_xp, 0) as personal_season_xp,
+                row_number() over (order by m.contributed_xp desc, m.joined_at asc) as rank
+            from squad_memberships m
+            left join personal_xp px on px.discord_user_id = m.discord_user_id
+            where m.squad_id = $1 and m.left_at is null
+            order by m.contributed_xp desc, m.joined_at asc
+            """,
+            squad_id,
+        )
+    )
 
 
 async def add_member(
