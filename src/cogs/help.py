@@ -6,6 +6,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.discord_state.staff_check import is_elevated_staff
+
 if TYPE_CHECKING:
     from src.bot import ManavaBot
 
@@ -16,15 +18,23 @@ class HelpCog(commands.Cog):
 
     @app_commands.command(name="help", description="Show available MANAVA bot commands")
     async def help_command(self, interaction: discord.Interaction) -> None:
+        # The reply is ephemeral, so it's safe to tailor it to the caller:
+        # everyone sees the member commands; Admin / MANAVA Team additionally
+        # see the staff sections. Normal members never see the admin commands.
+        show_admin = isinstance(interaction.user, discord.Member) and is_elevated_staff(
+            self.bot, interaction.user
+        )
+
         embed = discord.Embed(
             title="MANAVA Multiverse Bot — Commands",
             color=discord.Color.blurple(),
         )
+
         embed.add_field(
-            name="Squad commands — everyone",
+            name="Squad — everyone",
             value=(
-                "`/squad create name:<...>` — create a squad (requires the Member role, "
-                "1500+ lifetime XP, verified player, and not already being in a squad)\n"
+                "`/squad create name:<...>` — create a squad (needs the Member role, "
+                "1500+ lifetime XP, verified player, not already in a squad)\n"
                 "`/squad apply squad_name:<...>` — request to join a squad\n"
                 "`/squad info` — view your current squad's roster\n"
                 "`/squad leave` — leave your squad (Leaders must transfer or disband first)"
@@ -32,7 +42,7 @@ class HelpCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="Squad commands — Leader/Officer only",
+            name="Squad — Leader / Officer",
             value=(
                 "`/squad invite user:<@user>` — add someone directly, no approval needed\n"
                 "`/squad remove user:<@user>` — remove a member (asks to confirm)"
@@ -40,7 +50,7 @@ class HelpCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="Squad commands — Leader only",
+            name="Squad — Leader only",
             value=(
                 "`/squad promote user:<@user>` — promote a member to Officer (max 2 per squad)\n"
                 "`/squad demote user:<@user>` — demote an Officer to Member (asks to confirm)\n"
@@ -59,30 +69,66 @@ class HelpCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="Admin commands — Admin / MANAVA Team only",
+            name="Applications — everyone",
             value=(
-                "`/admin set-verified user:<@user> verified:<true|false>` — mark a user as a "
-                "verified MANAVA player\n"
-                "`/admin add-xp user:<@user> amount:<n>` — manually grant Personal Lifetime XP to a user\n"
-                "`/admin link-manava-account user:<@user> manava_user_id:<...>` — link a Discord "
-                "user to their MANAVA account\n"
-                "`!sync` — message command, not slash — re-syncs slash commands and re-checks "
-                "required roles/categories/permissions without restarting the bot"
+                "`/apply developer` — submit a Developer application\n"
+                "`/apply creator-streamer` — submit a Creator / Streamer application\n"
+                "One open application per type at a time; after a rejection you can reapply in 30 days."
             ),
             inline=False,
         )
-        embed.add_field(
-            name="XP configuration — Admin / MANAVA Team only",
-            value=(
-                "`/xpconfig view` — show current XP amounts, level thresholds, and settings\n"
-                "`/xpconfig set-xp key:<...> value:<n>` — update an XP amount\n"
-                "`/xpconfig set-threshold level:<2-7> value:<n>` — update a squad level's XP threshold\n"
-                "`/xpconfig exclude-channel channel:<#channel> excluded:<true|false>` — include/exclude "
-                "a channel from granting text XP\n"
-                "`/xpconfig simulate-manava-event ...` — test the MANAVA event pipeline directly"
-            ),
-            inline=False,
-        )
+
+        if show_admin:
+            embed.add_field(
+                name="​",
+                value="**— Admin / MANAVA Team only (below) —**",
+                inline=False,
+            )
+            embed.add_field(
+                name="Seasons",
+                value=(
+                    "`/season status` — show the current season\n"
+                    "`/season start` — open a new season\n"
+                    "`/season end` — end the active season\n"
+                    "`/season new` — end the current season and reset all Season XP "
+                    "(Lifetime XP is kept; asks to confirm)"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Admin",
+                value=(
+                    "`/admin set-verified user:<@user> verified:<bool>` — mark a user as a verified MANAVA player\n"
+                    "`/admin add-xp user:<@user> amount:<n> [reason]` — manually grant Personal XP\n"
+                    "`/admin link-manava-account user:<@user> manava_user_id:<...>` — link a Discord user to MANAVA\n"
+                    "`!sync` — message command (not slash): re-sync slash commands + re-check "
+                    "roles/categories/permissions without a restart"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Admin — MANAVA Gateway (only when Gateway mode is on)",
+                value=(
+                    "`/admin gateway refresh-identity user:<@user>` — re-fetch a user's MANAVA "
+                    "identity (linked / verified) and re-cache it"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="XP configuration",
+                value=(
+                    "`/xpconfig view` — current XP amounts, level thresholds, settings\n"
+                    "`/xpconfig set-xp key:<...> value:<n>` — update an XP amount\n"
+                    "`/xpconfig set-threshold level:<2-7> value:<n>` — update a squad level's XP threshold\n"
+                    "`/xpconfig exclude-channel channel:<#channel> excluded:<bool>` — toggle text XP for a channel\n"
+                    "`/xpconfig simulate-manava-event ...` — test the MANAVA event pipeline directly"
+                ),
+                inline=False,
+            )
+            embed.set_footer(text="You're seeing the Admin / MANAVA Team commands.")
+        else:
+            embed.set_footer(text="Staff see extra commands when they run /help.")
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

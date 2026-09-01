@@ -1,0 +1,17 @@
+# Keep the runtime image to just what `python -m src.main` needs.
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.env
+.env.example
+tests
+docs
+*.md
+CLAUDE.md
+requirements-dev.txt
+pytest.ini
+.gitlab-ci.yml

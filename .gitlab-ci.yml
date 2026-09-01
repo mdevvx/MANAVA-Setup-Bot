@@ -1,0 +1,35 @@
+# Quality gate for the MANAVA Discord bot backend.
+#
+# This file covers only lint / type-check / tests. Build, migrate and deploy
+# stages are owned by the MANAVA DevOps setup (CI/CD -> VPS) and can be added
+# below without touching the `quality` job.
+#
+# Runtime contract the deploy stages must honour (see docs/deployment.md):
+#   1. build the image from ./Dockerfile
+#   2. run `python -m scripts.run_migrations` against the target DB, once per release
+#   3. run `python -m src.main`  (exactly one instance)
+#   4. all config via environment variables (see docs/deployment.md for the list)
+
+stages:
+  - quality
+
+quality:
+  stage: quality
+  image: python:3.12-slim
+  cache:
+    key:
+      files:
+        - requirements-dev.txt
+    paths:
+      - .pip-cache
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  before_script:
+    - python -m pip install --upgrade pip
+    - pip install -r requirements-dev.txt
+  script:
+    - python -m pytest -q
+    - python -m mypy src
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH

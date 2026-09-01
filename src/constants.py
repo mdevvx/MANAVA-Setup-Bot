@@ -90,23 +90,35 @@ XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION = "tournament_participation_xp"
 XP_CONFIG_KEY_PLACEMENT_1ST = "placement_reward_1"
 XP_CONFIG_KEY_PLACEMENT_2ND = "placement_reward_2"
 XP_CONFIG_KEY_PLACEMENT_3RD = "placement_reward_3"
+# Phase 3 / Gateway: extra XP when tournament_placement carries wonPrizeSlot=true
+# (a paid prize-pool slot, not necessarily 1st). Seeded to 0 in migration 0007 —
+# inert until an admin sets it, so it changes nothing by default.
+XP_CONFIG_KEY_PRIZE_SLOT_BONUS = "prize_slot_bonus_xp"
 ALL_XP_CONFIG_KEYS: tuple[str, ...] = (
     XP_CONFIG_KEY_SKILL_MATCH,
     XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION,
     XP_CONFIG_KEY_PLACEMENT_1ST,
     XP_CONFIG_KEY_PLACEMENT_2ND,
     XP_CONFIG_KEY_PLACEMENT_3RD,
+    XP_CONFIG_KEY_PRIZE_SLOT_BONUS,
 )
 
-# --- Phase 2: MANAVA event types ---
-MANAVA_EVENT_SKILL_MATCH_COMPLETED = "skill_match_completed"
-MANAVA_EVENT_TOURNAMENT_PARTICIPATED = "tournament_participated"
+# --- MANAVA event types ---
+# Canonical names = the MANAVA Gateway's `eventType` values (gateway-diagram-en.html).
+# The pre-Gateway names are kept as accepted aliases (MANAVA_EVENT_TYPE_ALIASES)
+# so old payloads and the existing simulate-event harness still parse.
+MANAVA_EVENT_MATCH_COMPLETED = "match_completed"
+MANAVA_EVENT_TOURNAMENT_REGISTERED = "tournament_registered"
 MANAVA_EVENT_TOURNAMENT_PLACEMENT = "tournament_placement"
 ALL_MANAVA_EVENT_TYPES: tuple[str, ...] = (
-    MANAVA_EVENT_SKILL_MATCH_COMPLETED,
-    MANAVA_EVENT_TOURNAMENT_PARTICIPATED,
+    MANAVA_EVENT_MATCH_COMPLETED,
+    MANAVA_EVENT_TOURNAMENT_REGISTERED,
     MANAVA_EVENT_TOURNAMENT_PLACEMENT,
 )
+MANAVA_EVENT_TYPE_ALIASES: dict[str, str] = {
+    "skill_match_completed": MANAVA_EVENT_MATCH_COMPLETED,
+    "tournament_participated": MANAVA_EVENT_TOURNAMENT_REGISTERED,
+}
 
 # --- Phase 2: bot_config keys ---
 BOT_CONFIG_KEY_XP_EXCLUDED_CHANNELS = "xp_excluded_channel_ids"
@@ -116,3 +128,34 @@ MANAVA_INTEGRATION_MODE_POLLING = "polling"
 
 # --- Phase 2: leaderboards ---
 GLOBAL_LEADERBOARD_TOP_HIGHLIGHT = 32
+
+# --- Phase 3: application roles + review channel ---
+# The bot resolves these by name and CREATES them if missing on startup
+# (client decision, 2026-08-31) — unlike the squad/staff roles, which are
+# assumed to already exist. Creation needs Manage Roles + Manage Channels.
+ROLE_NAME_DEVELOPER_PENDING = "Developer Pending"
+ROLE_NAME_DEVELOPER = "Developer"
+ROLE_NAME_CREATOR = "Creator"
+ROLE_NAME_STREAMER = "Streamer"
+
+APPLICATION_ROLE_NAMES: tuple[str, ...] = (
+    ROLE_NAME_DEVELOPER_PENDING,
+    ROLE_NAME_DEVELOPER,
+    ROLE_NAME_CREATOR,
+    ROLE_NAME_STREAMER,
+)
+
+# Single private review channel for BOTH application types. Access is restricted
+# to Admin + MANAVA Team only — Moderator and Senior Moderator are explicitly
+# excluded (spec), even though they count as staff everywhere else.
+CHANNEL_NAME_APPLICATIONS_REVIEW = "applications-review"
+
+# --- Phase 3: application rules ---
+# After a rejection, the same application type can't be resubmitted for this
+# many days. Enforced server-side against the most recent rejected row.
+APPLICATION_REJECT_COOLDOWN_DAYS = 30
+
+# --- Phase 3: seasons ---
+# The very first season created gets this number; each subsequent Start Season /
+# Start New Season increments it.
+FIRST_SEASON_NUMBER = 1

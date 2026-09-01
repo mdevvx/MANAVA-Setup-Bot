@@ -17,13 +17,14 @@ def _fake_event(event_id: str = "evt-1") -> ManavaEvent:
     return ManavaEvent(
         event_id=event_id,
         manava_user_id="manava-123",
-        event_type=constants.MANAVA_EVENT_SKILL_MATCH_COMPLETED,
-        game="Test Game",
+        event_type=constants.MANAVA_EVENT_MATCH_COMPLETED,
+        game="cs2",
         timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         match_id=None,
         tournament_id=None,
         result=None,
-        placement=None,
+        place=None,
+        won_prize_slot=None,
     )
 
 

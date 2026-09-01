@@ -15,7 +15,7 @@ from src.errors import BotUserError
 from src.models.squad import Squad, SquadMembership, SquadRole
 from src.services import squad_eligibility, squad_lifecycle, squad_membership
 from src.ui.confirm_view import ConfirmView
-from src.ui.squad_apply_view import ApplyDecisionView
+from src.ui.squad_apply_view import build_join_decision_view
 
 if TYPE_CHECKING:
     from src.bot import ManavaBot
@@ -41,7 +41,9 @@ class SquadsCog(commands.Cog):
         state = self.bot.require_guild_state()
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
-            result = await squad_eligibility.check_eligibility(conn, member=member, state=state, squad_name=name)
+            result = await squad_eligibility.check_eligibility(
+                conn, member=member, state=state, squad_name=name, gateway=self.bot.gateway
+            )
             if not result.eligible:
                 reasons = "\n".join(f"- {f.message}" for f in result.failures)
                 await interaction.followup.send(f"You can't create a squad right now:\n{reasons}", ephemeral=True)
@@ -75,7 +77,7 @@ class SquadsCog(commands.Cog):
         targets: list[SquadMembership],
     ) -> None:
         guild = applicant.guild
-        view = ApplyDecisionView(bot=self.bot, request_id=request_id, applicant_id=applicant.id, squad_name=squad.name)
+        view = build_join_decision_view(request_id)
         content = f"**{applicant}** applied to join **{squad.name}**."
         for membership in targets:
             recipient = guild.get_member(membership.discord_user_id)

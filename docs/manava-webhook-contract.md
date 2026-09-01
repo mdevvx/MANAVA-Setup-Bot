@@ -1,9 +1,23 @@
-# MANAVA webhook contract (current STUB, pending MANAVA's real contract)
+# MANAVA webhook contract (SUPERSEDED — historical)
 
-This documents what the bot currently expects. Everything here is a
-placeholder until MANAVA provides their actual integration contract — the
-intent is that swapping to the real thing is a config/auth change, not a
-rewrite of the processing pipeline.
+> **The real MANAVA Gateway contract arrived 2026-08-31.** See
+> **`manava-gateway-integration.md`** for the current, authoritative
+> integration (identity lookup + HMAC-signed event webhooks + webhook
+> management). This file is kept only as a record of the pre-Gateway stub.
+>
+> What changed: auth is now HMAC-SHA256 `x-manava-signature` (not a bearer
+> token); payloads are camelCase; event types were renamed
+> (`skill_match_completed` → `match_completed`,
+> `tournament_participated` → `tournament_registered`); `placement` → `place`
+> and a new `wonPrizeSlot` field. The pipeline itself
+> (`manava_event_service`) is unchanged and still accepts the old shapes as
+> aliases.
+
+---
+
+This documented what the bot expected before the real contract. The intent —
+that swapping to the real thing is a config/auth change, not a pipeline
+rewrite — held.
 
 ## Endpoint
 

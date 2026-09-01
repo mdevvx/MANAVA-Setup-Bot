@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from src import constants
+from src.db.repositories import audit_logs as audit_repo
 from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import level_thresholds as level_thresholds_repo
 from src.db.repositories import memberships as memberships_repo
@@ -153,7 +154,17 @@ class XpCog(commands.Cog):
             raise BotUserError("XP amount can't be negative.")
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
+            old = (await xp_config_repo.get_all(conn)).get(key)
             await xp_config_repo.set_value(conn, key, value, updated_by=interaction.user.id)
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="xpconfig.set_xp",
+                target_type="xp_config",
+                target_id=key,
+                old_value={"value": old},
+                new_value={"value": value},
+            )
         await interaction.followup.send(f"Set `{key}` to **{value}**.", ephemeral=True)
 
     @xpconfig_group.command(name="set-threshold", description="Update the Lifetime Squad XP required for a level")
@@ -162,7 +173,17 @@ class XpCog(commands.Cog):
         await require_elevated_staff(self.bot, interaction)
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
+            old = (await level_thresholds_repo.get_all(conn)).get(level)
             await level_thresholds_repo.set_threshold(conn, level, value, updated_by=interaction.user.id)
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="xpconfig.set_threshold",
+                target_type="level_threshold",
+                target_id=str(level),
+                old_value={"lifetime_squad_xp_required": old},
+                new_value={"lifetime_squad_xp_required": value},
+            )
         await interaction.followup.send(f"Set L{level} threshold to **{value}** lifetime squad XP.", ephemeral=True)
 
     @xpconfig_group.command(name="exclude-channel", description="Include/exclude a channel from granting Discord text XP")
@@ -174,11 +195,21 @@ class XpCog(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
             current = await bot_config_repo.get_excluded_channel_ids(conn)
+            was_excluded = channel.id in current
             if excluded:
                 current.add(channel.id)
             else:
                 current.discard(channel.id)
             await bot_config_repo.set_excluded_channel_ids(conn, current)
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="xpconfig.exclude_channel",
+                target_type="channel",
+                target_id=str(channel.id),
+                old_value={"excluded": was_excluded},
+                new_value={"excluded": excluded},
+            )
         await self.bot.refresh_bot_config_cache()
         verb = "excluded from" if excluded else "included in"
         await interaction.followup.send(f"{channel.mention} is now {verb} Discord text XP.", ephemeral=True)
@@ -191,10 +222,11 @@ class XpCog(commands.Cog):
         event_type=[app_commands.Choice(name=t, value=t) for t in constants.ALL_MANAVA_EVENT_TYPES]
     )
     @app_commands.describe(
-        manava_user_id="The MANAVA user ID the event is for (must be linked via /admin link-manava-account)",
+        manava_user_id="The MANAVA user ID the event is for (must be linked/known to the bot)",
         event_type="Which kind of event to simulate",
-        game="Game name",
-        placement="Placement (1/2/3/etc, only meaningful for tournament_placement)",
+        game="Game name (cs2 / swag / billiard)",
+        place="Final placement (1/2/3/…), only meaningful for tournament_placement",
+        won_prize_slot="tournament_placement only: player landed in a paid prize slot",
         event_id="Override the event_id to deliberately test duplicate-delivery handling (defaults to a fresh random one)",
     )
     async def simulate_manava_event(
@@ -202,8 +234,9 @@ class XpCog(commands.Cog):
         interaction: discord.Interaction,
         manava_user_id: str,
         event_type: str,
-        game: str = "test-game",
-        placement: int | None = None,
+        game: str = "cs2",
+        place: int | None = None,
+        won_prize_slot: bool = False,
         event_id: str | None = None,
     ) -> None:
         await require_elevated_staff(self.bot, interaction)
@@ -218,7 +251,8 @@ class XpCog(commands.Cog):
             match_id=None,
             tournament_id=None,
             result=None,
-            placement=placement,
+            place=place,
+            won_prize_slot=won_prize_slot if event_type == constants.MANAVA_EVENT_TOURNAMENT_PLACEMENT else None,
         )
         async with self.bot.db_pool.acquire() as conn:
             outcome = await manava_event_service.process_event(conn, event)

@@ -8,7 +8,15 @@ from src.db.repositories import memberships as memberships_repo
 from src.db.repositories import personal_xp as xp_repo
 from src.db.repositories import squads as squads_repo
 from src.discord_state.role_resolver import ResolvedGuildState
+from src.models.gateway import LinkState
 from src.models.squad import EligibilityFailure, EligibilityResult
+from src.services import account_linking
+from src.services.gateway_client import GatewayClient
+
+_LINK_FAILURE_MESSAGE = {
+    LinkState.NOT_LINKED: "Link your MANAVA account first, then try again.",
+    LinkState.NOT_VERIFIED: "Confirm your email in MANAVA to become a Verified Player, then try again.",
+}
 
 
 def validate_squad_name(name: str) -> str | None:
@@ -27,6 +35,7 @@ async def check_eligibility(
     member: discord.Member,
     state: ResolvedGuildState,
     squad_name: str,
+    gateway: GatewayClient | None = None,
 ) -> EligibilityResult:
     failures: list[EligibilityFailure] = []
 
@@ -34,7 +43,6 @@ async def check_eligibility(
     if state.roles.member not in member.roles:
         failures.append(EligibilityFailure("member_role", "You need the **Member** role first."))
 
-    # STUB: replaced by full Unified XP system in Phase 2
     lifetime_xp = await xp_repo.get_lifetime_xp(conn, member.id)
     if lifetime_xp < constants.WAVE_XP_GATE:
         failures.append(
@@ -44,11 +52,13 @@ async def check_eligibility(
             )
         )
 
-    # STUB: replaced by MANAVA account-linking integration in Phase 3
-    verified = await xp_repo.get_verified_player(conn, member.id)
-    if not verified:
+    # Gateway mode: link_state() queries the MANAVA Gateway (and caches the
+    # result) so we can tell "not linked" from "email not verified". Stub mode:
+    # it reads the manual verified_player override and reports NOT_VERIFIED.
+    state_result = await account_linking.link_state(conn, member.id, gateway=gateway)
+    if state_result is not LinkState.OK:
         failures.append(
-            EligibilityFailure("verified_player", "Your MANAVA account must be verified/linked first.")
+            EligibilityFailure("verified_player", _LINK_FAILURE_MESSAGE[state_result])
         )
 
     existing_membership = await memberships_repo.get_active_membership(conn, member.id)

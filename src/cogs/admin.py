@@ -7,11 +7,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src.db.repositories import audit_logs as audit_repo
 from src.db.repositories import personal_xp as xp_repo
 from src.discord_state import provisioning
 from src.discord_state.role_resolver import resolve_guild_state
 from src.discord_state.staff_check import is_elevated_staff, require_elevated_staff
 from src.errors import BotUserError, DiscordSetupError
+from src.services import account_linking
 
 if TYPE_CHECKING:
     from src.bot import ManavaBot
@@ -34,7 +36,17 @@ class AdminCog(commands.Cog):
         await require_elevated_staff(self.bot, interaction)
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
+            old = await xp_repo.get_verified_player(conn, user.id)
             await xp_repo.set_verified_player(conn, user.id, verified)
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="admin.set_verified",
+                target_type="user",
+                target_id=str(user.id),
+                old_value={"verified_player": old},
+                new_value={"verified_player": verified},
+            )
         await interaction.followup.send(
             f"Set verified-player for {user.mention} to **{verified}**.", ephemeral=True
         )
@@ -43,14 +55,29 @@ class AdminCog(commands.Cog):
         name="add-xp",
         description="Manually add Personal Lifetime XP to a user",
     )
-    @app_commands.describe(user="The user to grant XP to", amount="XP amount to add")
-    async def add_xp(self, interaction: discord.Interaction, user: discord.Member, amount: int) -> None:
+    @app_commands.describe(
+        user="The user to grant XP to", amount="XP amount to add", reason="Why (recorded in the audit log)"
+    )
+    async def add_xp(
+        self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str | None = None
+    ) -> None:
         await require_elevated_staff(self.bot, interaction)
         if amount <= 0:
             raise BotUserError("Amount must be a positive number.")
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
+            before = await xp_repo.get_lifetime_xp(conn, user.id)
             personal = await xp_repo.add_xp(conn, user.id, amount)
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="admin.add_xp",
+                target_type="user",
+                target_id=str(user.id),
+                old_value={"lifetime_xp": before},
+                new_value={"lifetime_xp": personal.lifetime_xp, "amount": amount},
+                reason=reason,
+            )
         await interaction.followup.send(
             f"Added {amount} XP to {user.mention}. New lifetime XP: **{personal.lifetime_xp}**.", ephemeral=True
         )
@@ -69,9 +96,49 @@ class AdminCog(commands.Cog):
             existing = await xp_repo.get_discord_user_id_by_manava_id(conn, manava_user_id)
             if existing is not None and existing != user.id:
                 raise BotUserError(f"MANAVA account `{manava_user_id}` is already linked to another user.")
+            old = await xp_repo.get(conn, user.id)
             await xp_repo.set_manava_user_id(conn, user.id, manava_user_id)
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="admin.link_manava_account",
+                target_type="user",
+                target_id=str(user.id),
+                old_value={"manava_user_id": old.manava_user_id},
+                new_value={"manava_user_id": manava_user_id},
+            )
         await interaction.followup.send(
             f"Linked {user.mention} to MANAVA account `{manava_user_id}`.", ephemeral=True
+        )
+
+    # --- MANAVA Gateway ---------------------------------------------------
+    #
+    # The bot backend holds only DISCORD_BACKEND_API_KEY, which the Gateway
+    # scopes to the identity endpoint. Registering this deployment's
+    # /webhooks/manava URL is a MANAVA-side ops action (guarded by their
+    # INTERNAL_SERVICE_KEY), so there's no bot command for it.
+
+    gateway_group = app_commands.Group(
+        name="gateway", description="MANAVA Gateway integration (Admin / MANAVA Team only)", parent=admin_group
+    )
+
+    @gateway_group.command(name="refresh-identity", description="Re-fetch a user's MANAVA identity from the Gateway")
+    @app_commands.describe(user="The user to refresh")
+    async def gateway_refresh_identity(self, interaction: discord.Interaction, user: discord.Member) -> None:
+        await require_elevated_staff(self.bot, interaction)
+        if not self.bot.gateway.enabled:
+            raise BotUserError(
+                "Gateway mode is off — set MANAVA_GATEWAY_BASE_URL and DISCORD_BACKEND_API_KEY."
+            )
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        async with self.bot.db_pool.acquire() as conn:
+            identity = await account_linking.refresh_from_gateway(conn, self.bot.gateway, user.id)
+        if identity is None:
+            raise BotUserError("The Gateway lookup failed — see logs. Cached values are unchanged.")
+        await interaction.followup.send(
+            f"{user.mention}: linked=**{identity.linked}** "
+            f"manava_user_id=`{identity.manava_user_id or '—'}` verified=**{identity.verified_player}**",
+            ephemeral=True,
         )
 
     @commands.command(name="sync")
@@ -117,6 +184,16 @@ class AdminCog(commands.Cog):
                     perms_status = "skipped — roles/categories not fully resolved"
                     success = False
 
+            if self.bot.guild_state is None:
+                apps_status = "skipped — core roles/categories not resolved"
+            else:
+                await self.bot.refresh_application_state()
+                if self.bot.application_state is not None:
+                    apps_status = "OK — roles + #applications-review resolved"
+                else:
+                    apps_status = "FAILED — see logs (applications feature disabled)"
+                    success = False
+
             await self.bot.refresh_bot_config_cache()
 
         try:
@@ -132,6 +209,7 @@ class AdminCog(commands.Cog):
             f"Synced {len(synced)} slash command(s).\n"
             f"Role/category check: {state_status}\n"
             f"Category permissions: {perms_status}\n"
+            f"Applications setup: {apps_status}\n"
             f"XP exclusion list / MANAVA mode cache: refreshed"
         )
 

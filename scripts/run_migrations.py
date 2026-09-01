@@ -26,6 +26,29 @@ async def run() -> None:
     # ssl="require": Supabase's pooler refuses unencrypted connections.
     conn = await asyncpg.connect(dsn=config.database_url, statement_cache_size=0, ssl="require")
     try:
+        # All bot tables live in a private `discord_bot` schema (migration 0008)
+        # so they can't collide with other services sharing this database.
+        # Bootstrap it here, and relocate a pre-0008 public.schema_migrations so
+        # the applied-migrations history is never lost or double-counted.
+        await conn.execute("create schema if not exists discord_bot")
+        await conn.execute(
+            """
+            do $$
+            begin
+                if exists (
+                    select 1 from information_schema.tables
+                    where table_schema = 'public' and table_name = 'schema_migrations'
+                ) and not exists (
+                    select 1 from information_schema.tables
+                    where table_schema = 'discord_bot' and table_name = 'schema_migrations'
+                ) then
+                    execute 'alter table public.schema_migrations set schema discord_bot';
+                end if;
+            end $$;
+            """
+        )
+        await conn.execute("set search_path to discord_bot, public")
+
         await conn.execute(
             """
             create table if not exists schema_migrations (

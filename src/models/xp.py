@@ -23,7 +23,13 @@ class SquadXp:
 
 @dataclass(frozen=True, slots=True)
 class ManavaEvent:
-    """A validated inbound MANAVA event, ready for processing."""
+    """A validated inbound MANAVA event, ready for processing.
+
+    Field names follow the MANAVA Gateway payload (gateway-diagram-en.html):
+    `place` (final tournament ranking) and `won_prize_slot` (landed in a paid
+    prize-pool slot). `result` is retained for backward compatibility only —
+    the Gateway never sends it.
+    """
 
     event_id: str
     manava_user_id: str
@@ -33,7 +39,8 @@ class ManavaEvent:
     match_id: str | None
     tournament_id: str | None
     result: str | None
-    placement: int | None
+    place: int | None
+    won_prize_slot: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

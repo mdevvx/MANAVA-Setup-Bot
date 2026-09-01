@@ -76,6 +76,13 @@ async def add_xp(conn: asyncpg.Connection, discord_user_id: int, amount: int) ->
     return _row_to_personal_xp(row)
 
 
+async def reset_all_season_xp(conn: asyncpg.Connection) -> int:
+    """Start New Season: zero every user's Personal Season XP. Lifetime XP is
+    never touched. Returns the number of rows actually changed."""
+    result = await conn.execute("update personal_xp set season_xp = 0, updated_at = now() where season_xp <> 0")
+    return int(result.split()[-1]) if result else 0
+
+
 async def set_manava_user_id(conn: asyncpg.Connection, discord_user_id: int, manava_user_id: str) -> None:
     """STUB manual account-linking override: replaced by the real MANAVA
     account-linking integration in Phase 3. Stays available as an admin/support

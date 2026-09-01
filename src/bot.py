@@ -13,10 +13,12 @@ from src.config import BotConfig
 from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import squads as squads_repo
 from src.discord_state import provisioning
+from src.discord_state.applications_setup import ResolvedApplicationState, ensure_application_state
 from src.discord_state.role_resolver import ResolvedGuildState, resolve_guild_state
 from src.discord_state.xp_channel_filter import is_message_xp_eligible, is_within_cooldown
 from src.errors import BotUserError, DiscordSetupError
 from src.services import xp_service
+from src.services.gateway_client import GatewayClient
 from src.web.polling import ManavaPollingTask
 from src.web.webhook_server import ManavaWebhookServer
 
@@ -37,10 +39,12 @@ class ManavaBot(commands.Bot):
         self.config = config
         self.db_pool = db_pool
         self.guild_state: ResolvedGuildState | None = None
+        self.application_state: ResolvedApplicationState | None = None
         self.xp_excluded_channel_ids: set[int] = set()
         self._xp_cooldowns: dict[int, float] = {}
         self.webhook_server = ManavaWebhookServer(self)
         self.polling_task = ManavaPollingTask(self)
+        self.gateway = GatewayClient(config)
         # discord.py's documented pattern for a custom tree-wide error handler;
         # the type stubs don't reflect that this attribute is assignable.
         self.tree.on_error = self.on_app_command_error  # type: ignore[method-assign]
@@ -50,6 +54,19 @@ class ManavaBot(commands.Bot):
         await self.load_extension("src.cogs.admin")
         await self.load_extension("src.cogs.help")
         await self.load_extension("src.cogs.xp")
+        await self.load_extension("src.cogs.seasons")
+        await self.load_extension("src.cogs.applications")
+
+        # Persistent views: keep every long-lived button working across a bot
+        # restart — the application review buttons, the applicant's more-info
+        # "Respond" button, and the squad join-request Approve/Reject buttons.
+        from src.ui.application_moreinfo_view import MoreInfoRespondButton
+        from src.ui.application_review_view import ApplicationReviewView
+        from src.ui.squad_apply_view import SquadJoinDecisionButton
+
+        self.add_view(ApplicationReviewView())
+        self.add_dynamic_items(MoreInfoRespondButton, SquadJoinDecisionButton)
+
         guild_obj = discord.Object(id=self.config.guild_id)
         self.tree.copy_global_to(guild=guild_obj)
         await self.tree.sync(guild=guild_obj)
@@ -59,6 +76,7 @@ class ManavaBot(commands.Bot):
     async def close(self) -> None:
         await self.webhook_server.stop()
         self.polling_task.stop()
+        await self.gateway.aclose()
         await super().close()
 
     async def on_ready(self) -> None:
@@ -75,6 +93,7 @@ class ManavaBot(commands.Bot):
             self.guild_state = None
             logger.error("Squad features disabled until this is fixed: %s", exc.user_message)
 
+        await self.refresh_application_state()
         await self.refresh_bot_config_cache()
         logger.info("Logged in as %s (%s)", self.user, self.user.id if self.user else "?")
 
@@ -91,6 +110,28 @@ class ManavaBot(commands.Bot):
             self.polling_task.start()
         else:
             self.polling_task.stop()
+
+    async def refresh_application_state(self) -> None:
+        """Resolve/create the application roles + #applications-review channel and
+        re-apply that channel's permission baseline. A failure disables only the
+        applications feature — squads/XP are unaffected. Safe to call anytime
+        (on_ready, !sync); no-op if the guild's core roles aren't resolved yet."""
+        if self.guild_state is None:
+            self.application_state = None
+            return
+        try:
+            self.application_state = await ensure_application_state(self.guild_state)
+            logger.info("Applications feature ready (roles + #applications-review resolved).")
+        except DiscordSetupError as exc:
+            self.application_state = None
+            logger.error("Applications feature disabled until this is fixed: %s", exc.user_message)
+
+    def require_application_state(self) -> ResolvedApplicationState:
+        if self.application_state is None:
+            raise DiscordSetupError(
+                "The application system isn't set up on this server yet (missing roles or review channel). Contact staff."
+            )
+        return self.application_state
 
     def require_guild_state(self) -> ResolvedGuildState:
         if self.guild_state is None:

@@ -28,68 +28,102 @@ from src.services import xp_service
 
 logger = logging.getLogger(__name__)
 
-_REQUIRED_FIELDS = ("event_id", "manava_user_id", "event_type", "game", "timestamp")
+def _first(raw: dict[str, Any], *keys: str) -> Any:
+    """MANAVA Gateway payloads use camelCase (eventId, manavaUserId, …); older
+    payloads and the simulate-event harness use snake_case. Accept either."""
+    for key in keys:
+        if raw.get(key) is not None:
+            return raw[key]
+    return None
 
 
 def parse_event(raw: dict[str, Any]) -> ManavaEvent | ManavaEventValidationError:
-    """Validates payload shape per the spec's minimum field list. Returns a
-    validated ManavaEvent, or a ManavaEventValidationError describing what's wrong."""
-    missing = [f for f in _REQUIRED_FIELDS if not raw.get(f)]
+    """Validates payload shape and returns a ManavaEvent, or a
+    ManavaEventValidationError. Accepts both the Gateway's camelCase keys and
+    the legacy snake_case keys."""
+    event_id = _first(raw, "eventId", "event_id")
+    manava_user_id = _first(raw, "manavaUserId", "manava_user_id")
+    event_type_raw = _first(raw, "eventType", "event_type")
+    game = _first(raw, "game")
+    timestamp_raw = _first(raw, "timestamp")
+
+    missing = [
+        name
+        for name, value in (
+            ("eventId", event_id),
+            ("manavaUserId", manava_user_id),
+            ("eventType", event_type_raw),
+            ("game", game),
+            ("timestamp", timestamp_raw),
+        )
+        if not value
+    ]
     if missing:
         return ManavaEventValidationError(f"Missing required field(s): {', '.join(missing)}")
 
-    event_type = raw["event_type"]
+    event_type = constants.MANAVA_EVENT_TYPE_ALIASES.get(str(event_type_raw), str(event_type_raw))
     if event_type not in constants.ALL_MANAVA_EVENT_TYPES:
         return ManavaEventValidationError(
-            f"Unknown event_type {event_type!r}. Expected one of: {', '.join(constants.ALL_MANAVA_EVENT_TYPES)}"
+            f"Unknown eventType {event_type_raw!r}. Expected one of: {', '.join(constants.ALL_MANAVA_EVENT_TYPES)}"
         )
 
-    raw_timestamp = raw["timestamp"]
-    if not isinstance(raw_timestamp, str):
+    if not isinstance(timestamp_raw, str):
         return ManavaEventValidationError("timestamp must be an ISO-8601 string")
     try:
-        timestamp = datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00"))
+        timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
     except ValueError:
         return ManavaEventValidationError("timestamp is not valid ISO-8601")
 
-    placement_raw = raw.get("placement")
-    placement: int | None = None
-    if placement_raw is not None:
+    place_raw = _first(raw, "place", "placement")
+    place: int | None = None
+    if place_raw is not None:
         try:
-            placement = int(placement_raw)
+            place = int(place_raw)
         except (TypeError, ValueError):
-            return ManavaEventValidationError("placement must be an integer if provided")
+            return ManavaEventValidationError("place must be an integer if provided")
+
+    won_prize_slot_raw = _first(raw, "wonPrizeSlot", "won_prize_slot")
+
+    match_id = _first(raw, "matchId", "match_id")
+    tournament_id = _first(raw, "tournamentId", "tournament_id")
+    result = _first(raw, "result")
 
     return ManavaEvent(
-        event_id=str(raw["event_id"]),
-        manava_user_id=str(raw["manava_user_id"]),
+        event_id=str(event_id),
+        manava_user_id=str(manava_user_id),
         event_type=event_type,
-        game=str(raw["game"]),
+        game=str(game),
         timestamp=timestamp,
-        match_id=str(raw["match_id"]) if raw.get("match_id") is not None else None,
-        tournament_id=str(raw["tournament_id"]) if raw.get("tournament_id") is not None else None,
-        result=str(raw["result"]) if raw.get("result") is not None else None,
-        placement=placement,
+        match_id=str(match_id) if match_id is not None else None,
+        tournament_id=str(tournament_id) if tournament_id is not None else None,
+        result=str(result) if result is not None else None,
+        place=place,
+        won_prize_slot=bool(won_prize_slot_raw) if won_prize_slot_raw is not None else None,
     )
 
 
 async def _compute_xp(conn: asyncpg.Connection, event: ManavaEvent) -> int:
     config = await xp_config_repo.get_all(conn)
-    if event.event_type == constants.MANAVA_EVENT_SKILL_MATCH_COMPLETED:
+    if event.event_type == constants.MANAVA_EVENT_MATCH_COMPLETED:
         return config.get(constants.XP_CONFIG_KEY_SKILL_MATCH, 0)
 
-    if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_PARTICIPATED:
+    if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_REGISTERED:
         return config.get(constants.XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION, 0)
 
     if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_PLACEMENT:
         base = config.get(constants.XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION, 0)
-        bonus_key = {
+        placement_bonus_key = {
             1: constants.XP_CONFIG_KEY_PLACEMENT_1ST,
             2: constants.XP_CONFIG_KEY_PLACEMENT_2ND,
             3: constants.XP_CONFIG_KEY_PLACEMENT_3RD,
-        }.get(event.placement or 0)
-        bonus = config.get(bonus_key, 0) if bonus_key else 0
-        return base + bonus
+        }.get(event.place or 0)
+        placement_bonus = config.get(placement_bonus_key, 0) if placement_bonus_key else 0
+        # wonPrizeSlot: a paid prize-pool slot (not necessarily 1st). Adds a
+        # separate, admin-configurable bonus — defaults to 0 (see migration 0007).
+        prize_slot_bonus = (
+            config.get(constants.XP_CONFIG_KEY_PRIZE_SLOT_BONUS, 0) if event.won_prize_slot else 0
+        )
+        return base + placement_bonus + prize_slot_bonus
 
     return 0
 

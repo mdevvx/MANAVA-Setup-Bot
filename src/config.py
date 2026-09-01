@@ -41,14 +41,26 @@ class BotConfig:
     database_url: str
     log_level: str
     squad_archive_days: int
-    # STUB: real endpoint/credentials pending from MANAVA. If unset, the
-    # webhook server simply doesn't start (see src/web/webhook_server.py) —
-    # the /admin simulate-manava-event test harness works regardless.
+    # DEPRECATED legacy stub: shared-secret bearer token. Superseded by
+    # webhook_signing_secret (HMAC per the MANAVA Gateway contract). Still
+    # honoured if set and webhook_signing_secret is not, for a clean cutover.
     manava_webhook_secret: str | None
     webhook_port: int
     manava_poll_url: str | None
     manava_poll_api_key: str | None
     manava_poll_interval_seconds: int
+
+    # --- MANAVA Gateway integration (real contract, 2026-08-31) ---
+    # Gateway mode is "on" only when both the base URL and the API key are set;
+    # otherwise the bot keeps the pre-Gateway stub behaviour (manual
+    # verified_player / manava_user_id overrides, legacy webhook auth).
+    manava_gateway_base_url: str | None
+    discord_backend_api_key: str | None  # x-api-key header, bot -> Gateway
+    webhook_signing_secret: str | None  # HMAC-SHA256 key, verifies x-manava-signature on inbound events
+
+    @property
+    def gateway_enabled(self) -> bool:
+        return bool(self.manava_gateway_base_url and self.discord_backend_api_key)
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -63,4 +75,11 @@ class BotConfig:
             manava_poll_url=_optional("MANAVA_POLL_URL"),
             manava_poll_api_key=_optional("MANAVA_POLL_API_KEY"),
             manava_poll_interval_seconds=_optional_int("MANAVA_POLL_INTERVAL_SECONDS", 300),
+            manava_gateway_base_url=_normalise_base_url(_optional("MANAVA_GATEWAY_BASE_URL")),
+            discord_backend_api_key=_optional("DISCORD_BACKEND_API_KEY"),
+            webhook_signing_secret=_optional("WEBHOOK_SIGNING_SECRET"),
         )
+
+
+def _normalise_base_url(url: str | None) -> str | None:
+    return url.rstrip("/") if url else None

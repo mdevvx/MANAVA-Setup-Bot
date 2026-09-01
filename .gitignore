@@ -3,6 +3,9 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.mypy_cache/
+.pip-cache/
 build/
 *.egg-info/
 CLAUDE.md
+backend-gateway/

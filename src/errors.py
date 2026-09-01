@@ -64,3 +64,52 @@ class DiscordSetupError(BotUserError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+# --- Phase 3: applications ---
+
+
+class DuplicateApplicationError(BotUserError):
+    def __init__(self, type_label: str) -> None:
+        super().__init__(
+            f"You already have an open {type_label} application. Wait for it to be reviewed before submitting another."
+        )
+
+
+class ApplicationCooldownError(BotUserError):
+    def __init__(self, type_label: str, days_left: int) -> None:
+        super().__init__(
+            f"Your last {type_label} application was declined. You can reapply in {days_left} day(s)."
+        )
+
+
+class ApplicationNotFoundError(BotUserError):
+    def __init__(self) -> None:
+        super().__init__("That application no longer exists.")
+
+
+class ApplicationAlreadyDecidedError(BotUserError):
+    def __init__(self) -> None:
+        super().__init__("This application has already been decided — nothing more to do here.")
+
+
+# --- Phase 3: seasons ---
+
+
+class SeasonStateError(BotUserError):
+    """Start/End Season called in a state that doesn't allow it (e.g. no active season to end)."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+# --- Phase 3: MANAVA Gateway ---
+
+
+class GatewayError(Exception):
+    """A call to the MANAVA Gateway failed (network, non-2xx, bad body). Internal —
+    callers decide whether to fall back to cached/manual data or surface it."""
+
+
+class GatewayDisabledError(GatewayError):
+    """Gateway mode is off (MANAVA_GATEWAY_BASE_URL / DISCORD_BACKEND_API_KEY unset)."""

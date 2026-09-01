@@ -40,6 +40,14 @@ async def add_xp(conn: asyncpg.Connection, squad_id: UUID, amount: int) -> Squad
     return _row_to_squad_xp(row)
 
 
+async def reset_all_season_xp(conn: asyncpg.Connection) -> int:
+    """Start New Season: zero every squad's Season Squad XP. Lifetime Squad XP
+    is never touched, and per-member contributed_xp is deliberately left alone
+    (it's a per-stint lifetime figure, not seasonal). Returns rows changed."""
+    result = await conn.execute("update squad_xp set season_xp = 0, updated_at = now() where season_xp <> 0")
+    return int(result.split()[-1]) if result else 0
+
+
 async def get_global_leaderboard(conn: asyncpg.Connection, limit: int = 100) -> list[asyncpg.Record]:
     """Active squads ranked by Season Squad XP, most efficient single query
     (no N+1) — safe at ~70 squads."""
