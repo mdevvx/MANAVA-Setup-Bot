@@ -48,6 +48,7 @@ build/migrate/deploy stages are for DevOps to add.
 | `MANAVA_GATEWAY_BASE_URL` | Gateway mode | e.g. `https://discord-server-backend-gateway-demo.manava.io` |
 | `DISCORD_BACKEND_API_KEY` | Gateway mode | `x-api-key` sent on bot → Gateway calls (identity + webhook management) |
 | `WEBHOOK_SIGNING_SECRET` | Gateway mode | HMAC-SHA256 key that verifies `x-manava-signature` on inbound events |
+| `MANAVA_LINK_URL` | | Public URL of MANAVA's account/connections page. Shown to members who fail the squad gate for not being linked/verified. Optional — messages fall back to generic wording. |
 | `MANAVA_WEBHOOK_SECRET` | | DEPRECATED legacy bearer-token webhook auth; used only when `WEBHOOK_SIGNING_SECRET` is unset |
 | `MANAVA_POLL_URL` / `MANAVA_POLL_API_KEY` / `MANAVA_POLL_INTERVAL_SECONDS` | | dormant REST-polling fallback transport (only if `bot_config.manava_integration_mode = "polling"`) |
 

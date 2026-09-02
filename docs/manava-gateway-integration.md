@@ -51,9 +51,16 @@ GET  {MANAVA_GATEWAY_BASE_URL}/internal/identity/:discordId
 `NOT_LINKED` / `NOT_VERIFIED`. On any Gateway error it logs and falls back to
 the cached `personal_xp.verified_player` (reported as `NOT_VERIFIED` when
 false, since stub mode can't tell the two failure cases apart).
-`squad_eligibility.check_eligibility` uses this to show the applicant the right
-message ("link your account" vs "confirm your email"). Staff can force a
-re-fetch with `/admin gateway refresh-identity <user>`.
+`squad_eligibility.check_eligibility` uses this to show the member the right
+message ("link your account" vs "confirm your email"), including the
+`MANAVA_LINK_URL` if configured. Staff can force a re-fetch with
+`/admin gateway refresh-identity <user>`.
+
+**How a member actually links** — entirely in the main MANAVA web app (the
+"Connect Discord" flow on their account/connections page). The bot has no
+`/link` command and never touches Discord's account-linking; it just re-checks
+with the Gateway each time the member runs `/squad create`. Set
+`MANAVA_LINK_URL` so the gate message points them at the right page.
 
 ## Channel 2 — Gateway → bot: event webhooks
 

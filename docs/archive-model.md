@@ -5,8 +5,8 @@
 On disband, the spec asks for two things that are slightly in tension:
 
 1. A squad's Discord channels stay alive for a 30-day archive window before
-   being physically deleted (presumably to let staff review activity,
-   recover from an accidental disband, etc.).
+   being physically deleted (to let staff review activity, and recover from an
+   accidental disband — `/admin restore-squad`, see `recovery.md`).
 2. Access must be revoked *immediately* on disband, not after 30 days.
 3. The 70-active-squad capacity target (see `capacity-calculation.md`) has to
    hold even while squads are sitting in that 30-day window.

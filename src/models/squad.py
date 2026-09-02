@@ -38,6 +38,7 @@ class Squad:
     created_at: datetime
     disbanded_at: datetime | None
     archive_purge_after: datetime | None
+    discord_objects_purged_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

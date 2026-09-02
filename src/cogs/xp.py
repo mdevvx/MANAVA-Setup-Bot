@@ -71,8 +71,20 @@ class XpCog(commands.Cog):
             view = PaginatedEmbedView(pages, invoker_id=interaction.user.id)
             await interaction.followup.send(embed=pages[0], view=view, ephemeral=True)
 
+    async def _active_squad_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        try:
+            async with self.bot.db_pool.acquire() as conn:
+                names = await squads_repo.search_squad_names(conn, active=True, name_contains=current)
+        except Exception:  # noqa: BLE001 — autocomplete must never raise
+            logger.exception("leaderboard squad autocomplete failed")
+            return []
+        return [app_commands.Choice(name=n, value=n) for n in names]
+
     @leaderboard_group.command(name="squad", description="Show a squad's internal member leaderboard")
     @app_commands.describe(squad_name="Squad to show (defaults to your own current squad)")
+    @app_commands.autocomplete(squad_name=_active_squad_autocomplete)
     async def leaderboard_squad(self, interaction: discord.Interaction, squad_name: str | None = None) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
@@ -168,7 +180,10 @@ class XpCog(commands.Cog):
         await interaction.followup.send(f"Set `{key}` to **{value}**.", ephemeral=True)
 
     @xpconfig_group.command(name="set-threshold", description="Update the Lifetime Squad XP required for a level")
-    @app_commands.describe(level="Squad level (2-7)", value="Lifetime Squad XP required to reach this level")
+    @app_commands.describe(level="Squad level", value="Lifetime Squad XP required to reach this level")
+    @app_commands.choices(
+        level=[app_commands.Choice(name=f"Level {lvl}", value=lvl) for lvl in range(2, constants.MAX_SQUAD_LEVEL + 1)]
+    )
     async def xpconfig_set_threshold(self, interaction: discord.Interaction, level: int, value: int) -> None:
         await require_elevated_staff(self.bot, interaction)
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -219,12 +234,13 @@ class XpCog(commands.Cog):
         description="Test harness: simulate an inbound MANAVA event through the real processing pipeline",
     )
     @app_commands.choices(
-        event_type=[app_commands.Choice(name=t, value=t) for t in constants.ALL_MANAVA_EVENT_TYPES]
+        event_type=[app_commands.Choice(name=t, value=t) for t in constants.ALL_MANAVA_EVENT_TYPES],
+        game=[app_commands.Choice(name=g, value=g) for g in constants.MANAVA_GAMES],
     )
     @app_commands.describe(
         manava_user_id="The MANAVA user ID the event is for (must be linked/known to the bot)",
         event_type="Which kind of event to simulate",
-        game="Game name (cs2 / swag / billiard)",
+        game="Game the event is for",
         place="Final placement (1/2/3/…), only meaningful for tournament_placement",
         won_prize_slot="tournament_placement only: player landed in a paid prize slot",
         event_id="Override the event_id to deliberately test duplicate-delivery handling (defaults to a fresh random one)",

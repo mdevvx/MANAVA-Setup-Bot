@@ -13,10 +13,14 @@ from src.models.squad import EligibilityFailure, EligibilityResult
 from src.services import account_linking
 from src.services.gateway_client import GatewayClient
 
-_LINK_FAILURE_MESSAGE = {
-    LinkState.NOT_LINKED: "Link your MANAVA account first, then try again.",
-    LinkState.NOT_VERIFIED: "Confirm your email in MANAVA to become a Verified Player, then try again.",
-}
+def _link_failure_message(state: LinkState, link_url: str | None) -> str:
+    """Account linking / email verification is done in the main MANAVA app —
+    the bot only checks the result. `link_url` (MANAVA_LINK_URL), when set,
+    points the member straight at that page."""
+    at = f" ({link_url})" if link_url else ""
+    if state is LinkState.NOT_LINKED:
+        return f"Link your MANAVA account{at} first, then run this again."
+    return f"Confirm your email in MANAVA{at} to become a Verified Player, then run this again."
 
 
 def validate_squad_name(name: str) -> str | None:
@@ -36,6 +40,7 @@ async def check_eligibility(
     state: ResolvedGuildState,
     squad_name: str,
     gateway: GatewayClient | None = None,
+    link_url: str | None = None,
 ) -> EligibilityResult:
     failures: list[EligibilityFailure] = []
 
@@ -58,7 +63,7 @@ async def check_eligibility(
     state_result = await account_linking.link_state(conn, member.id, gateway=gateway)
     if state_result is not LinkState.OK:
         failures.append(
-            EligibilityFailure("verified_player", _LINK_FAILURE_MESSAGE[state_result])
+            EligibilityFailure("verified_player", _link_failure_message(state_result, link_url))
         )
 
     existing_membership = await memberships_repo.get_active_membership(conn, member.id)

@@ -9,11 +9,12 @@ from discord.ext import commands
 
 from src.db.repositories import audit_logs as audit_repo
 from src.db.repositories import personal_xp as xp_repo
+from src.db.repositories import squads as squads_repo
 from src.discord_state import provisioning
 from src.discord_state.role_resolver import resolve_guild_state
 from src.discord_state.staff_check import is_elevated_staff, require_elevated_staff
 from src.errors import BotUserError, DiscordSetupError
-from src.services import account_linking
+from src.services import account_linking, squad_lifecycle
 
 if TYPE_CHECKING:
     from src.bot import ManavaBot
@@ -109,6 +110,43 @@ class AdminCog(commands.Cog):
             )
         await interaction.followup.send(
             f"Linked {user.mention} to MANAVA account `{manava_user_id}`.", ephemeral=True
+        )
+
+    async def _disbanded_squad_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        if not isinstance(interaction.user, discord.Member) or not is_elevated_staff(self.bot, interaction.user):
+            return []
+        try:
+            async with self.bot.db_pool.acquire() as conn:
+                names = await squads_repo.search_squad_names(conn, active=False, name_contains=current)
+        except Exception:  # noqa: BLE001 — autocomplete must never raise
+            logger.exception("restore-squad autocomplete failed")
+            return []
+        return [app_commands.Choice(name=n, value=n) for n in names]
+
+    @admin_group.command(
+        name="restore-squad",
+        description="Recover a squad disbanded within the last 30 days (before its channels are purged)",
+    )
+    @app_commands.describe(squad_name="The disbanded squad to restore")
+    @app_commands.autocomplete(squad_name=_disbanded_squad_autocomplete)
+    async def restore_squad(self, interaction: discord.Interaction, squad_name: str) -> None:
+        await require_elevated_staff(self.bot, interaction)
+        state = self.bot.require_guild_state()
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        async with self.bot.db_pool.acquire() as conn:
+            squad = await squads_repo.get_squad_by_name_any_status(conn, squad_name)
+            if squad is None:
+                raise BotUserError(f"No squad named **{squad_name}** has ever existed.")
+            restored, reopened = await squad_lifecycle.restore_squad(
+                conn, state=state, squad=squad, actor_id=interaction.user.id
+            )
+        members = ", ".join(f"<@{uid}>" for uid, _ in reopened) or "none"
+        await interaction.followup.send(
+            f"Restored **{restored.name}**. Re-added {len(reopened)} member(s): {members}.\n"
+            "Any former members who have since joined another squad were skipped.",
+            ephemeral=True,
         )
 
     # --- MANAVA Gateway ---------------------------------------------------

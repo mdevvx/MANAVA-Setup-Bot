@@ -52,6 +52,20 @@ class SquadJoinDecisionButton(
     ) -> "SquadJoinDecisionButton":
         return cls(UUID(match["req_id"]), match["action"])
 
+    async def _dm_applicant(self, bot: "ManavaBot", applicant_id: int, content: str) -> bool:
+        """Notify the applicant of the decision. Returns False if their DMs are
+        closed (or the user is gone) so the reviewer can be told."""
+        try:
+            user = bot.get_user(applicant_id) or await bot.fetch_user(applicant_id)
+            await user.send(content)
+            return True
+        except discord.Forbidden:
+            logger.info("Applicant %s has DMs closed — decision not delivered", applicant_id)
+            return False
+        except discord.DiscordException:
+            logger.exception("Failed to DM squad decision to applicant %s", applicant_id)
+            return False
+
     async def _disable_dm_buttons(self, interaction: discord.Interaction) -> None:
         if interaction.message is None:
             return
@@ -79,6 +93,7 @@ class SquadJoinDecisionButton(
             return
 
         applicant: discord.Member | None = None
+        applicant_id = 0
         squad_name = "the squad"
         try:
             state = bot.require_guild_state()
@@ -89,6 +104,7 @@ class SquadJoinDecisionButton(
                     return
                 squad = await squads_repo.get_squad_by_id(conn, request.squad_id)
                 squad_name = squad.name
+                applicant_id = request.applicant_id
                 applicant = guild.get_member(request.applicant_id)
 
                 if approved:
@@ -113,9 +129,22 @@ class SquadJoinDecisionButton(
             return
 
         await self._disable_dm_buttons(interaction)
+
+        if approved:
+            dm_text = (
+                f"✅ Your request to join **{squad_name}** was approved by {approver.mention}. "
+                "You now have access to the squad's channels."
+            )
+        else:
+            dm_text = f"❌ Your request to join **{squad_name}** was declined."
+        dmed = await self._dm_applicant(bot, applicant_id, dm_text)
+
         verb = "approved" if approved else "rejected"
         who = applicant.mention if applicant is not None else "the applicant"
-        await interaction.followup.send(f"You {verb} {who}'s application to **{squad_name}**.", ephemeral=True)
+        note = "" if dmed else "\n\n⚠️ Couldn't DM the applicant (their DMs are closed)."
+        await interaction.followup.send(
+            f"You {verb} {who}'s application to **{squad_name}**.{note}", ephemeral=True
+        )
 
 
 def build_join_decision_view(request_id: UUID) -> discord.ui.View:

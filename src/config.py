@@ -57,6 +57,10 @@ class BotConfig:
     manava_gateway_base_url: str | None
     discord_backend_api_key: str | None  # x-api-key header, bot -> Gateway
     webhook_signing_secret: str | None  # HMAC-SHA256 key, verifies x-manava-signature on inbound events
+    # Public URL of MANAVA's account/connections page. Shown to members who
+    # fail the squad-creation gate because they haven't linked / verified.
+    # Linking itself happens entirely in the MANAVA web app, not the bot.
+    manava_link_url: str | None
 
     @property
     def gateway_enabled(self) -> bool:
@@ -78,6 +82,7 @@ class BotConfig:
             manava_gateway_base_url=_normalise_base_url(_optional("MANAVA_GATEWAY_BASE_URL")),
             discord_backend_api_key=_optional("DISCORD_BACKEND_API_KEY"),
             webhook_signing_secret=_optional("WEBHOOK_SIGNING_SECRET"),
+            manava_link_url=_optional("MANAVA_LINK_URL"),
         )
 
 

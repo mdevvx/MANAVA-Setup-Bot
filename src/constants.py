@@ -120,6 +120,11 @@ MANAVA_EVENT_TYPE_ALIASES: dict[str, str] = {
     "tournament_participated": MANAVA_EVENT_TOURNAMENT_REGISTERED,
 }
 
+# Games the Gateway sends events for (gateway-diagram-en.html). Not enforced on
+# inbound events (any value is stored) — used only for the simulate-event
+# harness's dropdown.
+MANAVA_GAMES: tuple[str, ...] = ("cs2", "swag", "billiard")
+
 # --- Phase 2: bot_config keys ---
 BOT_CONFIG_KEY_XP_EXCLUDED_CHANNELS = "xp_excluded_channel_ids"
 BOT_CONFIG_KEY_MANAVA_INTEGRATION_MODE = "manava_integration_mode"

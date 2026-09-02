@@ -101,6 +101,7 @@ class HelpCog(commands.Cog):
                     "`/admin set-verified user:<@user> verified:<bool>` — mark a user as a verified MANAVA player\n"
                     "`/admin add-xp user:<@user> amount:<n> [reason]` — manually grant Personal XP\n"
                     "`/admin link-manava-account user:<@user> manava_user_id:<...>` — link a Discord user to MANAVA\n"
+                    "`/admin restore-squad squad_name:<...>` — recover a squad disbanded in the last 30 days\n"
                     "`!sync` — message command (not slash): re-sync slash commands + re-check "
                     "roles/categories/permissions without a restart"
                 ),

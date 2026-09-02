@@ -22,6 +22,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_DM_CLOSED_HELP = (
+    "I can't send you a direct message, and squad decisions are delivered by DM. "
+    "Right-click the server icon → **Privacy Settings** → enable **Direct Messages**, then run this again."
+)
+
+
+async def _try_dm(member: discord.Member, content: str) -> bool:
+    """Send a DM; return False if the member's DMs are closed."""
+    try:
+        await member.send(content)
+        return True
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+
 
 class SquadsCog(commands.Cog):
     def __init__(self, bot: "ManavaBot") -> None:
@@ -42,7 +56,12 @@ class SquadsCog(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
             result = await squad_eligibility.check_eligibility(
-                conn, member=member, state=state, squad_name=name, gateway=self.bot.gateway
+                conn,
+                member=member,
+                state=state,
+                squad_name=name,
+                gateway=self.bot.gateway,
+                link_url=self.bot.config.manava_link_url,
             )
             if not result.eligible:
                 reasons = "\n".join(f"- {f.message}" for f in result.failures)
@@ -50,9 +69,32 @@ class SquadsCog(commands.Cog):
                 return
             squad = await squad_lifecycle.create_squad(conn, state=state, leader=member, squad_name=name)
         await interaction.followup.send(f"Squad **{squad.name}** created! You're the Leader.", ephemeral=True)
+        # Not a hard requirement — but the Leader needs open DMs to receive
+        # join-request notifications, so warn if they're closed.
+        if not await _try_dm(
+            member,
+            f"You're the Leader of **{squad.name}**. Members' join requests will arrive here as DMs.",
+        ):
+            await interaction.followup.send(
+                "⚠️ Your DMs appear to be closed, so you won't get join-request notifications. "
+                "Enable **Direct Messages** for this server (right-click the server icon → Privacy Settings).",
+                ephemeral=True,
+            )
+
+    async def _active_squad_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        try:
+            async with self.bot.db_pool.acquire() as conn:
+                names = await squads_repo.search_squad_names(conn, active=True, name_contains=current)
+        except Exception:  # noqa: BLE001 — autocomplete must never raise
+            logger.exception("squad autocomplete failed")
+            return []
+        return [app_commands.Choice(name=n, value=n) for n in names]
 
     @squad_group.command(name="apply", description="Apply to join a squad")
-    @app_commands.describe(squad_name="The exact name of the squad to apply to")
+    @app_commands.describe(squad_name="The squad to apply to")
+    @app_commands.autocomplete(squad_name=_active_squad_autocomplete)
     async def apply(self, interaction: discord.Interaction, squad_name: str) -> None:
         member = self._member(interaction)
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -60,12 +102,24 @@ class SquadsCog(commands.Cog):
             squad = await squads_repo.get_active_squad_by_name(conn, squad_name)
             if squad is None:
                 raise BotUserError(f"No active squad named **{squad_name}** was found.")
+            if await memberships_repo.get_active_membership(conn, member.id) is not None:
+                raise BotUserError("You're already in a squad. Leave it before applying to another.")
+
+            # Verify the applicant can be DM'd before creating the request —
+            # the decision comes back by DM, and this doubles as the receipt.
+            if not await _try_dm(
+                member,
+                f"📨 Your application to **{squad.name}** was received — "
+                "you'll get the Leader/Officers' decision here.",
+            ):
+                raise BotUserError(_DM_CLOSED_HELP)
+
             request = await squad_membership.submit_join_request(conn, squad_id=squad.id, applicant=member)
             recipients = await memberships_repo.list_active_members(conn, squad.id)
         notify_targets = [m for m in recipients if m.squad_role in (SquadRole.LEADER, SquadRole.OFFICER)]
         await self._notify_join_request(squad, request.id, member, notify_targets)
         await interaction.followup.send(
-            f"Your application to **{squad.name}** was submitted. The Leader/Officers have been notified.",
+            f"Your application to **{squad.name}** was submitted — check your DMs for the decision.",
             ephemeral=True,
         )
 
@@ -78,7 +132,7 @@ class SquadsCog(commands.Cog):
     ) -> None:
         guild = applicant.guild
         view = build_join_decision_view(request_id)
-        content = f"**{applicant}** applied to join **{squad.name}**."
+        content = f"{applicant.mention} applied to join **{squad.name}**."
         for membership in targets:
             recipient = guild.get_member(membership.discord_user_id)
             if recipient is None:

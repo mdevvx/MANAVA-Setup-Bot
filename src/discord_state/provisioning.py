@@ -231,7 +231,19 @@ async def revoke_all_member_access(state: ResolvedGuildState, squad: Squad) -> N
     for the 30-day purge job. See docs/archive-model.md for the reasoning."""
     guild = state.guild
     role = guild.get_role(squad.role_id)
+    rank_roles = (state.roles.squad_leader, state.roles.squad_officer, state.roles.squad_member)
     if role is not None:
+        # Strip the shared Squad Leader/Officer/Member rank roles from everyone
+        # in this squad BEFORE deleting the squad-specific role (deleting that
+        # one is auto-removed from members by Discord, but the shared rank roles
+        # are not).
+        for squad_member in list(role.members):
+            to_remove = [r for r in rank_roles if r in squad_member.roles]
+            if to_remove:
+                try:
+                    await squad_member.remove_roles(*to_remove, reason="Squad disbanded")
+                except discord.DiscordException:
+                    logger.exception("Failed to strip rank roles from %s on disband", squad_member.id)
         try:
             await role.delete(reason="Squad disbanded — revoke member access immediately")
         except discord.DiscordException:
@@ -247,6 +259,42 @@ async def revoke_all_member_access(state: ResolvedGuildState, squad: Squad) -> N
                         await channel.set_permissions(target, overwrite=None, reason="Squad disbanded")
                     except discord.DiscordException:
                         logger.exception("Failed to clear overwrite for %s on channel %s", target.id, channel_id)
+
+
+async def reapply_restored_squad_access(
+    state: ResolvedGuildState, squad: Squad, reopened: list[tuple[int, str]]
+) -> None:
+    """Undo the Discord side of a disband: `squad.role_id` is the freshly
+    recreated squad role. Re-key the member channels off it and re-grant every
+    reopened member their squad role + rank role (+ officer-channel overwrite
+    for the Leader/Officers). The 4 channels themselves still exist — only
+    their old role-scoped overwrites were lost when the role was deleted."""
+    guild = state.guild
+    role = guild.get_role(squad.role_id)
+    if role is None:
+        raise DiscordSetupError("The restored squad's role is missing on the server. Contact staff.")
+
+    for channel_id in (squad.member_text_channel_id, squad.member_voice_channel_id):
+        channel = guild.get_channel(channel_id)
+        if channel is not None:
+            try:
+                await channel.set_permissions(role, view_channel=True, reason="Squad restored")
+            except discord.DiscordException:
+                logger.exception("Failed to re-permission channel %s on restore", channel_id)
+
+    for user_id, squad_role_value in reopened:
+        member = guild.get_member(user_id)
+        if member is None:
+            logger.warning("Restored squad %s: member %s is no longer in the server", squad.id, user_id)
+            continue
+        rank = SquadRole(squad_role_value)
+        try:
+            await member.add_roles(role, reason="Squad restored")
+            await set_squad_rank_role(state, member, rank)
+            if rank in (SquadRole.LEADER, SquadRole.OFFICER):
+                await grant_officer_channel_access(state, squad, member)
+        except discord.DiscordException:
+            logger.exception("Failed to restore access for %s in squad %s", user_id, squad.id)
 
 
 async def grant_squad_membership_access(state: ResolvedGuildState, squad: Squad, member: discord.Member) -> None:

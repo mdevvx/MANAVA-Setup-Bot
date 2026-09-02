@@ -6,6 +6,12 @@ are checked against the caller's role *in that specific squad*.
 
 All slash-command replies are ephemeral unless noted.
 
+Name parameters offer a live dropdown as you type: `/squad apply squad_name`
+and `/leaderboard squad squad_name` suggest active squads; `/admin
+restore-squad squad_name` suggests restorable (disbanded, un-purged) squads.
+`/xpconfig set-xp key`, `set-threshold level`, and `simulate-manava-event
+event_type` / `game` are fixed dropdowns.
+
 ## Squads — `/squad`
 
 | Command | Who | What |
@@ -72,6 +78,7 @@ staff only; Moderator and Senior Moderator are explicitly blocked**:
 | `/admin set-verified user:<@user> verified:<bool>` | Manual Verified Player override (support fallback; real value comes from the Gateway in Gateway mode). Audited. |
 | `/admin add-xp user:<@user> amount:<n> [reason]` | Manually grant Personal Lifetime + Season XP (cascades to the user's squad if any). Audited with reason. |
 | `/admin link-manava-account user:<@user> manava_user_id:<id>` | Manual Discord↔MANAVA id map (support fallback). Rejects an id already linked to someone else. Audited. |
+| `/admin restore-squad squad_name:<name>` | Recover a squad disbanded within the last 30 days (before its channels are purged): recreates the deleted squad role, re-activates the record, reopens memberships, re-grants access. Skips members now in another squad; refuses if the former Leader is. Audited. See `recovery.md`. |
 
 ### `/admin gateway`  (elevated staff, Gateway mode only)
 

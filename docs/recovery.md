@@ -44,6 +44,31 @@ UPDATE squads SET leader_user_id = <user> WHERE id = '<uuid>';
 Then give that member the **Squad Leader** rank role and officer-channel
 access in Discord (or have them run any leader command, which re-syncs rank).
 
+## Recover an accidentally disbanded squad
+
+While the squad is still inside its 30-day archive window (channels not yet
+purged — `discord_objects_purged_at IS NULL`):
+
+```
+/admin restore-squad squad_name:<exact name>       (Admin / MANAVA Team)
+```
+
+This recreates the squad-specific role that was deleted at disband, flips the
+record back to `active`, reopens every membership the disband closed, and
+re-grants Discord access (member/officer channels + rank roles). The 4 channels
+themselves were never deleted, so they come back with their content.
+
+Not restored automatically:
+- Former members who have since **joined another squad** (they'd break the
+  one-squad-per-user rule) — the command reports these; they must leave the
+  other squad, then be re-added with `/squad invite`.
+- If the **former Leader** is now in another squad, the command refuses
+  entirely until that's resolved.
+
+Once `discord_objects_purged_at` is set (archive window elapsed, channels
+gone), auto-restore is no longer possible — the name stays reserved forever;
+rename the old row if it genuinely must be freed (see below).
+
 ## Archived squad stuck (Discord objects never purged)
 
 The daily `purge_archived_squads` task deletes objects once

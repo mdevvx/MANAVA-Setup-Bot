@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 import discord
+
+from src.errors import BotUserError
+
+logger = logging.getLogger(__name__)
 
 
 class ConfirmView(discord.ui.View):
@@ -38,8 +43,19 @@ class ConfirmView(discord.ui.View):
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
-        await self._on_confirm(interaction)
-        self.stop()
+        try:
+            await self._on_confirm(interaction)
+        except BotUserError as exc:
+            # The response was already consumed by edit_message above, so the
+            # confirmed action's own error has to be delivered as a follow-up.
+            await interaction.followup.send(exc.user_message, ephemeral=True)
+        except Exception:
+            logger.exception("Confirmed action failed")
+            await interaction.followup.send(
+                "Something went wrong completing that. Please try again, or contact staff.", ephemeral=True
+            )
+        finally:
+            self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
