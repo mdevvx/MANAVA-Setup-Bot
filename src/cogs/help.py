@@ -98,6 +98,7 @@ class HelpCog(commands.Cog):
             embed.add_field(
                 name="Admin",
                 value=(
+                    "`/admin status` — show the bot's configuration and live status\n"
                     "`/admin set-verified user:<@user> verified:<bool>` — mark a user as a verified MANAVA player\n"
                     "`/admin add-xp user:<@user> amount:<n> [reason]` — manually grant Personal XP\n"
                     "`/admin link-manava-account user:<@user> manava_user_id:<...>` — link a Discord user to MANAVA\n"

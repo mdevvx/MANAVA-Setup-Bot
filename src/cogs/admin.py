@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from src import constants
 from src.db.repositories import audit_logs as audit_repo
 from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import personal_xp as xp_repo
@@ -16,7 +17,7 @@ from src.discord_state.role_resolver import resolve_guild_state
 from src.discord_state.staff_check import is_elevated_staff, require_elevated_staff
 from src.errors import BotUserError, DiscordSetupError
 from src.models.application import AppType
-from src.services import account_linking, squad_lifecycle
+from src.services import account_linking, season_service, squad_lifecycle
 
 if TYPE_CHECKING:
     from src.bot import ManavaBot
@@ -40,6 +41,102 @@ class AdminCog(commands.Cog):
         default_permissions=discord.Permissions(administrator=True),
         guild_only=True,
     )
+
+    @admin_group.command(name="status", description="Show the bot's configuration and live status")
+    async def status(self, interaction: discord.Interaction) -> None:
+        await require_elevated_staff(self.bot, interaction)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        bot = self.bot
+
+        async with bot.db_pool.acquire() as conn:
+            active_squads = await conn.fetchval("select count(*) from squads where status = 'active'")
+            archived_squads = await conn.fetchval(
+                "select count(*) from squads where status = 'disbanded' and discord_objects_purged_at is null"
+            )
+            active_members = await conn.fetchval(
+                "select count(*) from squad_memberships where left_at is null"
+            )
+            app_rows = await conn.fetch("select status, count(*) as n from applications group by status")
+            migrations = await conn.fetchval("select count(*) from schema_migrations")
+            xp_keys = await conn.fetchval("select count(*) from xp_config")
+            thresholds = await conn.fetchval("select count(*) from level_thresholds")
+            season = await season_service.get_current(conn)
+
+        cfg = bot.config
+        gateway_on = cfg.gateway_enabled
+        if cfg.webhook_signing_secret:
+            webhook_auth = "HMAC x-manava-signature"
+        elif cfg.manava_webhook_secret:
+            webhook_auth = "legacy bearer token"
+        else:
+            webhook_auth = "DISABLED (no secret) — /healthz only"
+
+        app_counts = {r["status"]: r["n"] for r in app_rows}
+        app_summary = " · ".join(f"{k}: {v}" for k, v in sorted(app_counts.items())) or "none"
+
+        default_ch = (
+            bot.application_state.review_channel.mention if bot.application_state is not None else "not resolved"
+        )
+        overrides = bot.application_review_channel_ids
+        dev_ch = f"<#{overrides['developer']}>" if "developer" in overrides else default_ch
+        cs_ch = f"<#{overrides['creator_streamer']}>" if "creator_streamer" in overrides else default_ch
+
+        embed = discord.Embed(title="MANAVA Bot — Status", color=discord.Color.blurple())
+        embed.add_field(
+            name="Runtime",
+            value=(
+                f"User: {bot.user.mention if bot.user else '?'}\n"
+                f"Up since: {discord.utils.format_dt(bot.started_at, 'R')}\n"
+                f"Latency: {round(bot.latency * 1000)} ms"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Discord setup",
+            value=(
+                f"Squad features: {'✅ ready' if bot.guild_state is not None else '❌ disabled (missing roles/categories)'}\n"
+                f"Applications: {'✅ ready' if bot.application_state is not None else '❌ disabled'}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="MANAVA integration",
+            value=(
+                f"Mode: {'**Gateway**' if gateway_on else '**stub** (manual overrides)'}\n"
+                f"Gateway URL: {cfg.manava_gateway_base_url or '—'}\n"
+                f"Webhook auth: {webhook_auth}  ·  port {cfg.webhook_port}\n"
+                f"Account-link URL: {cfg.manava_link_url or '(not set)'}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Config",
+            value=(
+                f"Log level: {cfg.log_level}  ·  archive window: {cfg.squad_archive_days}d\n"
+                f"Migrations applied: {migrations}\n"
+                f"XP: +{constants.DISCORD_TEXT_XP_AMOUNT}/msg, min {constants.DISCORD_TEXT_XP_MIN_CHARS} chars, "
+                f"{constants.DISCORD_TEXT_XP_COOLDOWN_SECONDS}s cooldown\n"
+                f"XP config keys: {xp_keys}  ·  level thresholds: {thresholds}  ·  "
+                f"XP-excluded channels: {len(bot.xp_excluded_channel_ids)}"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Application routing",
+            value=(f"Developer → {dev_ch}\nCreator / Streamer → {cs_ch}"),
+            inline=False,
+        )
+        embed.add_field(
+            name="Live",
+            value=(
+                f"Active squads: {active_squads}  ·  in archive window: {archived_squads}\n"
+                f"Active memberships: {active_members}\n"
+                f"Applications — {app_summary}\n"
+                f"Season: {f'#{season.season_number} ({season.status.value})' if season else 'none started'}"
+            ),
+            inline=False,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @admin_group.command(
         name="set-verified",

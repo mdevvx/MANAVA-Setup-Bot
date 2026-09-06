@@ -42,6 +42,7 @@ class ManavaBot(commands.Bot):
         self.application_state: ResolvedApplicationState | None = None
         self.xp_excluded_channel_ids: set[int] = set()
         self.application_review_channel_ids: dict[str, int] = {}
+        self.started_at = discord.utils.utcnow()
         self._xp_cooldowns: dict[int, float] = {}
         self.webhook_server = ManavaWebhookServer(self)
         self.polling_task = ManavaPollingTask(self)

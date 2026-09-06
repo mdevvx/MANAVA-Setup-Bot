@@ -1,9 +1,19 @@
 # QA report
 
-`pytest` — **75 passing** (`pytest.ini` sets `asyncio_mode = auto`). Unit-level:
-service logic, permission-overwrite construction, event parsing/dedup, and
-signature verification, using mocked repositories / Discord objects rather than
-a live gateway or DB. Run: `pip install -r requirements-dev.txt && pytest`.
+`pytest` — **89 passing**, `mypy src` clean (`pytest.ini` sets
+`asyncio_mode = auto`). Unit-level: service logic, permission-overwrite
+construction, event parsing/dedup, HMAC signature verification, cross-squad
+isolation, disband cleanup + recovery, application flows / cooldown /
+permissions / channel routing, season reset, protected-role guard — using
+mocked repositories / Discord objects rather than a live gateway or DB. Run:
+`pip install -r requirements-dev.txt && pytest && mypy src`.
+
+Beyond the acceptance checklist, later sessions added coverage for: disband
+recovery (`/admin restore-squad`, `test_squad_restore.py`), disband role
+cleanup (`test_disband_cleanup.py`), per-type application review channels
+(`test_application_channel_config.py`), the account-link message wording, and
+the Gateway wire-format signature match. `/admin status` and the slash-command
+autocompletes are read-only / UI-only and verified by loading the command tree.
 
 ## Coverage vs the acceptance checklist
 

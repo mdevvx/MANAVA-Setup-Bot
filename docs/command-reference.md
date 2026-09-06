@@ -82,6 +82,7 @@ staff only; Moderator and Senior Moderator are explicitly blocked**:
 
 | Command | What |
 |---|---|
+| `/admin status` | An embed of the bot's configuration and live state: runtime/latency, whether squad + application features resolved, MANAVA integration mode + webhook auth scheme + Gateway URL + account-link URL, log level / archive window / migration count / XP rule / config counts, application routing per type, and live counts (active & archived squads, memberships, applications by status, current season). Read-only. |
 | `/admin set-verified user:<@user> verified:<bool>` | Manual Verified Player override (support fallback; real value comes from the Gateway in Gateway mode). Audited. |
 | `/admin add-xp user:<@user> amount:<n> [reason]` | Manually grant Personal Lifetime + Season XP (cascades to the user's squad if any). Audited with reason. |
 | `/admin link-manava-account user:<@user> manava_user_id:<id>` | Manual Discord↔MANAVA id map (support fallback). Rejects an id already linked to someone else. Audited. |
