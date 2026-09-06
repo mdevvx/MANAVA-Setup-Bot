@@ -29,6 +29,7 @@ Migration files:
 | `0006_enable_rls_phase3.sql` | RLS on the Phase 3 tables |
 | `0007_gateway_xp_config.sql` | seeds `xp_config` row `prize_slot_bonus_xp = 0` |
 | `0008_isolate_bot_schema.sql` | moves every bot table from `public` into the `discord_bot` schema |
+| `0009_application_review_channels.sql` | seeds `bot_config` row `application_review_channel_ids = {}` |
 
 ---
 
@@ -154,7 +155,11 @@ e.g. `squad.disband`, `application.approve`, `season.start_new`,
 
 ### `bot_config`
 Generic non-secret key→jsonb store. Keys: `xp_excluded_channel_ids` (array),
-`manava_integration_mode` (`webhook` \| `polling`). Secrets never go here.
+`manava_integration_mode` (`webhook` \| `polling`),
+`application_review_channel_ids` (`{app_type -> channel id}` override for where
+each application type's review embed posts; unset types use
+`#applications-review` — set via `/admin set-application-channel`). Secrets
+never go here.
 
 ### `schema_migrations`
 `filename` (PK), `applied_at`. Written by `scripts/run_migrations.py`.

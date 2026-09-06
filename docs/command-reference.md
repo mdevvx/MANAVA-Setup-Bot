@@ -86,6 +86,7 @@ staff only; Moderator and Senior Moderator are explicitly blocked**:
 | `/admin add-xp user:<@user> amount:<n> [reason]` | Manually grant Personal Lifetime + Season XP (cascades to the user's squad if any). Audited with reason. |
 | `/admin link-manava-account user:<@user> manava_user_id:<id>` | Manual Discord↔MANAVA id map (support fallback). Rejects an id already linked to someone else. Audited. |
 | `/admin restore-squad squad_name:<name>` | Recover a squad disbanded within the last 30 days (before its channels are purged): recreates the deleted squad role, re-activates the record, reopens memberships, re-grants access. Skips members now in another squad; refuses if the former Leader is. Audited. See `recovery.md`. |
+| `/admin set-application-channel application_type:<Developer\|Creator / Streamer> [channel]` | Route that application type's review posts to a specific channel (locks it to Admin / MANAVA Team, denies Mod / Sr Mod). Leave `channel` empty to reset that type to the default `#applications-review`. Stored in `bot_config`, no redeploy. Audited. |
 
 ### `/admin gateway`  (elevated staff, Gateway mode only)
 

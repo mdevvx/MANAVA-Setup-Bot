@@ -60,9 +60,22 @@ async def finalize_submission(bot: "ManavaBot", *, applicant: discord.Member, ap
 
     from src.ui.application_review_view import ApplicationReviewView
 
-    message = await app_state.review_channel.send(
-        embed=render_application_embed(app), view=ApplicationReviewView()
-    )
+    # Per-type override (set via /admin set-application-channel), else the
+    # default #applications-review. A configured-but-deleted channel falls back.
+    review_channel: discord.abc.Messageable = app_state.review_channel
+    configured_id = bot.application_review_channel_ids.get(app.app_type.value)
+    if configured_id is not None:
+        candidate = bot.get_channel(configured_id)
+        if isinstance(candidate, discord.TextChannel):
+            review_channel = candidate
+        else:
+            logger.warning(
+                "Configured review channel %s for %s is missing — using #applications-review",
+                configured_id,
+                app.app_type.value,
+            )
+
+    message = await review_channel.send(embed=render_application_embed(app), view=ApplicationReviewView())
     async with bot.db_pool.acquire() as conn:
         await applications_repo.set_review_message(
             conn, app.id, channel_id=message.channel.id, message_id=message.id

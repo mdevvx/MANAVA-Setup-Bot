@@ -109,7 +109,11 @@ class _ReasonModal(discord.ui.Modal):
             await application_actions.apply_rejection(
                 bot, app=updated, reviewer_id=interaction.user.id, reason=value
             )
-            await interaction.followup.send("Application rejected. The applicant has been notified.", ephemeral=True)
+            await interaction.followup.send(
+                f"Rejected <@{updated.applicant_id}>'s {updated.app_type.label} application. "
+                "They've been notified.",
+                ephemeral=True,
+            )
         else:
             async with bot.db_pool.acquire() as conn:
                 updated = await application_service.request_more_info(
@@ -122,7 +126,11 @@ class _ReasonModal(discord.ui.Modal):
                 bot, app=updated, reviewer_id=interaction.user.id, question=value or "(no details provided)"
             )
             note = "" if dmed else "\n\n⚠️ Couldn't DM the applicant (their DMs are closed)."
-            await interaction.followup.send(f"Info request recorded.{note}", ephemeral=True)
+            await interaction.followup.send(
+                f"Asked <@{updated.applicant_id}> for more info on their {updated.app_type.label} "
+                f"application.{note}",
+                ephemeral=True,
+            )
 
     # Modal.on_error is (interaction, error) at runtime; mypy resolves to the View base.
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:  # type: ignore[override]
@@ -161,7 +169,7 @@ class ApplicationReviewView(discord.ui.View):
                 )
             await application_actions.apply_approval(bot, app=updated, reviewer_id=interaction.user.id)
             await interaction.followup.send(
-                f"Approved **{app.applicant_username}**'s {app.app_type.label} application.", ephemeral=True
+                f"Approved <@{app.applicant_id}>'s {app.app_type.label} application.", ephemeral=True
             )
         except Exception as exc:  # noqa: BLE001 — surfaced to the reviewer, logged if unexpected
             await _report_error(interaction, exc)

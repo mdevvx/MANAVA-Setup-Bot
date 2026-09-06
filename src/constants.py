@@ -128,6 +128,9 @@ MANAVA_GAMES: tuple[str, ...] = ("cs2", "swag", "billiard")
 # --- Phase 2: bot_config keys ---
 BOT_CONFIG_KEY_XP_EXCLUDED_CHANNELS = "xp_excluded_channel_ids"
 BOT_CONFIG_KEY_MANAVA_INTEGRATION_MODE = "manava_integration_mode"
+# {app_type -> channel id} — per-type override for where the review embed goes;
+# unset types fall back to #applications-review.
+BOT_CONFIG_KEY_APP_REVIEW_CHANNELS = "application_review_channel_ids"
 MANAVA_INTEGRATION_MODE_WEBHOOK = "webhook"
 MANAVA_INTEGRATION_MODE_POLLING = "polling"
 

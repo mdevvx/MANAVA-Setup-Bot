@@ -8,12 +8,14 @@ from discord import app_commands
 from discord.ext import commands
 
 from src.db.repositories import audit_logs as audit_repo
+from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import personal_xp as xp_repo
 from src.db.repositories import squads as squads_repo
-from src.discord_state import provisioning
+from src.discord_state import applications_setup, provisioning
 from src.discord_state.role_resolver import resolve_guild_state
 from src.discord_state.staff_check import is_elevated_staff, require_elevated_staff
 from src.errors import BotUserError, DiscordSetupError
+from src.models.application import AppType
 from src.services import account_linking, squad_lifecycle
 
 if TYPE_CHECKING:
@@ -121,6 +123,65 @@ class AdminCog(commands.Cog):
             )
         await interaction.followup.send(
             f"Linked {user.mention} to MANAVA account `{manava_user_id}`.", ephemeral=True
+        )
+
+    @admin_group.command(
+        name="set-application-channel",
+        description="Choose which channel a given application type is posted to (blank = default #applications-review)",
+    )
+    @app_commands.describe(
+        application_type="Which application type this channel is for",
+        channel="Target channel — leave empty to reset to #applications-review",
+    )
+    @app_commands.choices(
+        application_type=[
+            app_commands.Choice(name="Developer", value=AppType.DEVELOPER.value),
+            app_commands.Choice(name="Creator / Streamer", value=AppType.CREATOR_STREAMER.value),
+        ]
+    )
+    async def set_application_channel(
+        self,
+        interaction: discord.Interaction,
+        application_type: str,
+        channel: discord.TextChannel | None = None,
+    ) -> None:
+        await require_elevated_staff(self.bot, interaction)
+        state = self.bot.require_guild_state()
+        label = AppType(application_type).label
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        async with self.bot.db_pool.acquire() as conn:
+            old = (await bot_config_repo.get_application_review_channels(conn)).get(application_type)
+            await bot_config_repo.set_application_review_channel(
+                conn, application_type, channel.id if channel else None
+            )
+            await audit_repo.record(
+                conn,
+                actor_id=interaction.user.id,
+                action="admin.set_application_channel",
+                target_type="application_type",
+                target_id=application_type,
+                old_value={"channel_id": old},
+                new_value={"channel_id": channel.id if channel else None},
+            )
+        await self.bot.refresh_bot_config_cache()
+
+        if channel is None:
+            await interaction.followup.send(
+                f"**{label}** applications will now go to the default **#applications-review**.", ephemeral=True
+            )
+            return
+
+        note = ""
+        try:
+            await applications_setup.apply_review_channel_permissions(state, channel)
+        except discord.Forbidden:
+            note = (
+                "\n⚠️ Couldn't set permissions on it — lock it to Admin / MANAVA Team manually "
+                "(deny Moderator / Senior Moderator)."
+            )
+        await interaction.followup.send(
+            f"**{label}** applications will now be posted to {channel.mention}.{note}", ephemeral=True
         )
 
     async def _disbanded_squad_autocomplete(

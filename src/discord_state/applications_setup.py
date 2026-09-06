@@ -120,6 +120,18 @@ async def _resolve_or_create_channel(state: ResolvedGuildState) -> discord.TextC
     )
 
 
+async def apply_review_channel_permissions(
+    state: ResolvedGuildState, channel: discord.TextChannel
+) -> None:
+    """Lock a channel down to the same private baseline as #applications-review
+    (Admin + MANAVA Team only; Moderator / Senior Moderator explicitly denied)
+    — used when an admin points an application type at a custom channel."""
+    await channel.edit(
+        overwrites=_review_channel_overwrites(state),
+        reason="MANAVA bot: application review channel baseline permissions",
+    )
+
+
 async def ensure_application_state(state: ResolvedGuildState) -> ResolvedApplicationState:
     developer_pending = await _resolve_or_create_role(state.guild, constants.ROLE_NAME_DEVELOPER_PENDING)
     developer = await _resolve_or_create_role(state.guild, constants.ROLE_NAME_DEVELOPER)

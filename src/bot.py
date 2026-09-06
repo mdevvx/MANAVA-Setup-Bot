@@ -41,6 +41,7 @@ class ManavaBot(commands.Bot):
         self.guild_state: ResolvedGuildState | None = None
         self.application_state: ResolvedApplicationState | None = None
         self.xp_excluded_channel_ids: set[int] = set()
+        self.application_review_channel_ids: dict[str, int] = {}
         self._xp_cooldowns: dict[int, float] = {}
         self.webhook_server = ManavaWebhookServer(self)
         self.polling_task = ManavaPollingTask(self)
@@ -99,10 +100,12 @@ class ManavaBot(commands.Bot):
 
     async def refresh_bot_config_cache(self) -> None:
         """Reloads bot_config-backed in-memory state: the XP channel exclusion
-        list, and starts/stops the MANAVA REST-polling fallback according to
-        the configured integration mode. Safe to call anytime (e.g. !sync)."""
+        list, the per-type application review channel overrides, and starts/stops
+        the MANAVA REST-polling fallback per the configured integration mode.
+        Safe to call anytime (e.g. !sync)."""
         async with self.db_pool.acquire() as conn:
             self.xp_excluded_channel_ids = await bot_config_repo.get_excluded_channel_ids(conn)
+            self.application_review_channel_ids = await bot_config_repo.get_application_review_channels(conn)
             mode = await bot_config_repo.get_value(
                 conn, constants.BOT_CONFIG_KEY_MANAVA_INTEGRATION_MODE, constants.MANAVA_INTEGRATION_MODE_WEBHOOK
             )

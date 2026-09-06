@@ -34,3 +34,21 @@ async def get_excluded_channel_ids(conn: asyncpg.Connection) -> set[int]:
 
 async def set_excluded_channel_ids(conn: asyncpg.Connection, channel_ids: set[int]) -> None:
     await set_value(conn, constants.BOT_CONFIG_KEY_XP_EXCLUDED_CHANNELS, sorted(channel_ids))
+
+
+async def get_application_review_channels(conn: asyncpg.Connection) -> dict[str, int]:
+    """{app_type value -> channel id} overrides for where each application type's
+    review embed is posted. Missing key -> use the default #applications-review."""
+    raw = await get_value(conn, constants.BOT_CONFIG_KEY_APP_REVIEW_CHANNELS, {})
+    return {str(k): int(v) for k, v in raw.items() if v}
+
+
+async def set_application_review_channel(
+    conn: asyncpg.Connection, app_type_value: str, channel_id: int | None
+) -> None:
+    current = await get_application_review_channels(conn)
+    if channel_id is None:
+        current.pop(app_type_value, None)
+    else:
+        current[app_type_value] = channel_id
+    await set_value(conn, constants.BOT_CONFIG_KEY_APP_REVIEW_CHANNELS, current)
