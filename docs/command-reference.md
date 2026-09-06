@@ -4,6 +4,13 @@
 Administrator also passes, as a bootstrap fallback). Squad-scoped permissions
 are checked against the caller's role *in that specific squad*.
 
+The `/admin`, `/xpconfig`, and `/season` groups require the Discord
+**Administrator** permission, so Discord hides them from everyone else in the
+command picker (the runtime `require_elevated_staff` check is still the real
+gate). To let a non-Administrator role such as **MANAVA Team** use them, a
+server admin allows that role once under **Server Settings → Integrations →
+MANAVA Setup Bot → Command Permissions**.
+
 All slash-command replies are ephemeral unless noted.
 
 Name parameters offer a live dropdown as you type: `/squad apply squad_name`

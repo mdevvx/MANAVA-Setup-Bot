@@ -21,8 +21,13 @@ class SeasonsCog(commands.Cog):
     def __init__(self, bot: "ManavaBot") -> None:
         self.bot = bot
 
+    # Hidden from anyone without the Discord Administrator permission; the
+    # require_elevated_staff() checks remain the real gate.
     season_group = app_commands.Group(
-        name="season", description="Season controls (Admin / MANAVA Team only)"
+        name="season",
+        description="Season controls (Admin / MANAVA Team only)",
+        default_permissions=discord.Permissions(administrator=True),
+        guild_only=True,
     )
 
     @season_group.command(name="status", description="Show the current season")

@@ -26,7 +26,18 @@ class AdminCog(commands.Cog):
     def __init__(self, bot: "ManavaBot") -> None:
         self.bot = bot
 
-    admin_group = app_commands.Group(name="admin", description="Admin utility commands")
+    # default_permissions hides the whole /admin tree (incl. /admin gateway)
+    # from anyone without the Discord **Administrator** permission in the
+    # command picker — the require_elevated_staff() checks stay as the real
+    # runtime gate. To let a non-Administrator role (e.g. MANAVA Team) use
+    # these, a server admin allows it once under Server Settings → Integrations
+    # → (bot) → Command Permissions.
+    admin_group = app_commands.Group(
+        name="admin",
+        description="Admin utility commands",
+        default_permissions=discord.Permissions(administrator=True),
+        guild_only=True,
+    )
 
     @admin_group.command(
         name="set-verified",

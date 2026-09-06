@@ -34,7 +34,14 @@ class XpCog(commands.Cog):
         self.bot = bot
 
     leaderboard_group = app_commands.Group(name="leaderboard", description="Squad and member leaderboards")
-    xpconfig_group = app_commands.Group(name="xpconfig", description="XP economy configuration (Admin / MANAVA Team only)")
+    # Hidden from anyone without the Discord Administrator permission; the
+    # require_elevated_staff() checks remain the real gate.
+    xpconfig_group = app_commands.Group(
+        name="xpconfig",
+        description="XP economy configuration (Admin / MANAVA Team only)",
+        default_permissions=discord.Permissions(administrator=True),
+        guild_only=True,
+    )
 
     # --- Leaderboards -----------------------------------------------------
 
