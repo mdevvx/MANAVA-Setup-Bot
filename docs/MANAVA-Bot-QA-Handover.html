@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MANAVA Multiverse Bot — QA Handover</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm 22mm 18mm; }
+
+  :root {
+    --ink: #1a1c22;
+    --soft: #4a4f5c;
+    --muted: #7b8091;
+    --rule: #d7dae2;
+    --rule-soft: #e9ebf1;
+    --accent: #2f5bd0;
+    --accent-tint: #eef2fc;
+    --good: #1f7a3d;
+    --good-tint: #e9f5ec;
+    --warn: #9a6b00;
+    --warn-tint: #fbf2dd;
+    --band: #f4f5f8;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
+    font-size: 10.4pt;
+    line-height: 1.5;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; color: var(--ink); }
+  h2 { font-size: 15pt; margin: 0 0 4pt; padding-bottom: 4pt; border-bottom: 2px solid var(--ink); }
+  h2 .num { color: var(--accent); }
+  h3 { font-size: 11.5pt; margin: 16pt 0 4pt; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt; padding-left: 18pt; }
+  li { margin: 0 0 3pt; }
+  code { font-family: "Consolas", "SFMono-Regular", monospace; font-size: 9pt;
+         background: var(--band); padding: 0.5pt 3pt; border-radius: 3px; }
+  strong { font-weight: 600; }
+
+  .section { page-break-before: always; padding-top: 4pt; }
+  .section:first-of-type { page-break-before: avoid; }
+  .lead { color: var(--soft); }
+
+  /* ---- Cover ---- */
+  .cover { height: 247mm; display: flex; flex-direction: column; page-break-after: always; }
+  .cover .rule { height: 4px; background: var(--ink); margin-bottom: 26pt; }
+  .cover .eyebrow { font-family: "Consolas", monospace; letter-spacing: 0.18em;
+                    text-transform: uppercase; font-size: 8.5pt; color: var(--muted); }
+  .cover h1 { font-size: 30pt; line-height: 1.12; margin: 10pt 0 6pt; }
+  .cover .subtitle { font-size: 13pt; color: var(--soft); font-family: Georgia, serif; }
+  .cover .spacer { flex: 1; }
+  .cover .status {
+    display: inline-block; background: var(--good-tint); color: var(--good);
+    border: 1px solid #bfe0c8; border-radius: 4px; padding: 5pt 12pt;
+    font-weight: 600; font-size: 10pt; margin-bottom: 20pt;
+  }
+  .meta { width: 100%; border-collapse: collapse; font-size: 9.6pt; }
+  .meta td { padding: 5pt 0; border-top: 1px solid var(--rule-soft); vertical-align: top; }
+  .meta td:first-child { color: var(--muted); width: 34%;
+    font-family: "Consolas", monospace; font-size: 8.6pt; letter-spacing: 0.04em;
+    text-transform: uppercase; padding-top: 6pt; }
+
+  /* ---- Tables ---- */
+  table.data { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 9.4pt; }
+  table.data caption { text-align: left; font-size: 9pt; color: var(--muted); margin-bottom: 4pt; }
+  table.data th {
+    background: var(--ink); color: #fff; text-align: left; font-weight: 600;
+    padding: 5pt 7pt; font-size: 8.8pt; letter-spacing: 0.02em;
+  }
+  table.data td { padding: 4.5pt 7pt; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  table.data tr:nth-child(even) td { background: var(--band); }
+  table.data.tight td, table.data.tight th { padding: 3.5pt 7pt; }
+  .pass { color: var(--good); font-weight: 600; }
+  .na   { color: var(--muted); }
+  .center { text-align: center; }
+  .nowrap { white-space: nowrap; }
+
+  .callout {
+    border: 1px solid var(--rule); border-left: 4px solid var(--accent);
+    background: var(--accent-tint); padding: 9pt 12pt; margin: 8pt 0 12pt;
+    font-size: 9.6pt;
+  }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-tint); }
+  .callout h4 { margin: 0 0 3pt; font-family: "Segoe UI", sans-serif; font-size: 9.6pt; }
+
+  .kpi-row { display: flex; gap: 10pt; margin: 4pt 0 14pt; }
+  .kpi {
+    flex: 1; border: 1px solid var(--rule); border-radius: 6px; padding: 10pt 12pt; text-align: center;
+  }
+  .kpi .n { font-family: Georgia, serif; font-size: 20pt; font-weight: 600; color: var(--ink); }
+  .kpi .l { font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 2pt; }
+
+  .toc { font-size: 10pt; }
+  .toc td { padding: 4pt 0; border-bottom: 1px dotted var(--rule); }
+  .toc td:last-child { text-align: right; color: var(--muted); font-family: "Consolas", monospace; font-size: 8.5pt; }
+
+  .signoff td { height: 34pt; }
+  .footer-note { font-size: 8pt; color: var(--muted); border-top: 1px solid var(--rule-soft);
+                 padding-top: 6pt; margin-top: 14pt; }
+  .avoid-break { page-break-inside: avoid; }
+  table.data thead th { position: sticky; }
+  table.data thead { display: table-header-group; }
+  table.data tr { page-break-inside: avoid; }
+
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div class="rule"></div>
+  <div class="eyebrow">Quality Assurance · Handover Package</div>
+  <h1>MANAVA Multiverse<br>Discord Bot</h1>
+  <div class="subtitle">QA Report &amp; Acceptance Test Handover</div>
+
+  <div class="spacer"></div>
+
+  <div class="status">&#10003;&nbsp;&nbsp;89 / 89 automated tests passing &nbsp;·&nbsp; type-check clean</div>
+
+  <table class="meta">
+    <tr><td>Project</td><td>MANAVA Multiverse — custom Discord bot (squads, XP&nbsp;economy, leaderboards, application workflows, MANAVA Gateway integration)</td></tr>
+    <tr><td>Document</td><td>QA Report &amp; Acceptance Test Handover (Milestone&nbsp;3 deliverable)</td></tr>
+    <tr><td>Build / commit</td><td><code>97a8b39</code> &nbsp;(main)</td></tr>
+    <tr><td>Date</td><td>6&nbsp;September&nbsp;2026</td></tr>
+    <tr><td>Runtime</td><td>Python 3.11+ &nbsp;·&nbsp; discord.py 2.7.1 &nbsp;·&nbsp; Supabase Postgres (asyncpg)</td></tr>
+    <tr><td>Prepared by</td><td>Muhammad Nadeem</td></tr>
+    <tr><td>Recipient</td><td>MANAVA</td></tr>
+  </table>
+
+  <div class="footer-note">
+    This document accompanies the source repository and the <code>docs/</code> handover set
+    (<code>command-reference.md</code>, <code>schema.md</code>, <code>deployment.md</code>,
+    <code>recovery.md</code>, <code>manava-gateway-integration.md</code>, <code>logging.md</code>,
+    <code>known-limitations.md</code>, <code>deferred-items.md</code>). It supersedes the plain-text
+    <code>docs/qa-report.md</code> for presentation purposes; the two carry the same substance.
+  </div>
+</div>
+
+<!-- ============ 1. PURPOSE ============ -->
+<div class="section">
+  <h2><span class="num">1.</span>&nbsp; Document purpose &amp; contents</h2>
+  <p class="lead">
+    This report is the QA deliverable for Milestone 3. It states what has been verified
+    automatically, provides the full evidence inventory, and hands MANAVA an executable
+    acceptance-test checklist for the items that require a live Discord server and the real
+    MANAVA Gateway credentials.
+  </p>
+
+  <table class="toc">
+    <tr><td>1 &nbsp; Document purpose &amp; contents</td><td>this page</td></tr>
+    <tr><td>2 &nbsp; System under test</td><td>&sect;2</td></tr>
+    <tr><td>3 &nbsp; Test approach &amp; how to run</td><td>&sect;3</td></tr>
+    <tr><td>4 &nbsp; Automated test results &amp; acceptance-criteria coverage</td><td>&sect;4</td></tr>
+    <tr><td>5 &nbsp; Automated test inventory (evidence)</td><td>&sect;5</td></tr>
+    <tr><td>6 &nbsp; Manual / live-server acceptance checklist</td><td>&sect;6</td></tr>
+    <tr><td>7 &nbsp; Failure-scenario coverage</td><td>&sect;7</td></tr>
+    <tr><td>8 &nbsp; Known limitations &amp; items pending external input</td><td>&sect;8</td></tr>
+    <tr><td>9 &nbsp; Sign-off</td><td>&sect;9</td></tr>
+  </table>
+</div>
+
+<!-- ============ 2. SUT ============ -->
+<div class="section">
+  <h2><span class="num">2.</span>&nbsp; System under test</h2>
+  <p>
+    A single-process Discord bot (discord.py 2.x, fully async) backed by a Supabase
+    Postgres database accessed directly via <code>asyncpg</code>. It provides:
+  </p>
+  <ul>
+    <li><strong>Squads</strong> — eligibility-gated creation, per-squad role + four channels
+      distributed across the <code>SQUADS&nbsp;01&ndash;07</code> categories, membership and
+      leadership flows (apply / invite / approve / reject / leave / remove / promote / demote /
+      transfer / disband), 30-day archive on disband, and <code>/admin restore-squad</code> recovery.</li>
+    <li><strong>Unified XP economy</strong> — one Personal XP balance (Discord text activity +
+      MANAVA events), Lifetime + Season counters, 1:1 cascade into Squad XP, level-based member caps.</li>
+    <li><strong>Leaderboards</strong> — global squad (Season XP, top-32 badge) and per-squad member,
+      rendered natively.</li>
+    <li><strong>Applications</strong> — Developer and Creator/Streamer review workflows with
+      persistent Approve / Reject / Request-More-Info controls and a persistent applicant reply flow.</li>
+    <li><strong>Seasons</strong> — manual Start / End / Start-New (resets Season XP, never Lifetime).</li>
+    <li><strong>MANAVA Gateway integration</strong> — identity lookup (<code>GET /internal/identity/:discordId</code>)
+      and HMAC-SHA256-signed inbound event webhooks, verified against MANAVA's Gateway source.</li>
+  </ul>
+
+  <div class="callout">
+    <h4>Two operating modes</h4>
+    <strong>Gateway mode</strong> (when <code>MANAVA_GATEWAY_BASE_URL</code> + <code>DISCORD_BACKEND_API_KEY</code>
+    are set) uses the real MANAVA identity service and HMAC webhook verification.
+    <strong>Stub mode</strong> (default until MANAVA supplies credentials) uses the manual
+    <code>/admin set-verified</code> and <code>/admin link-manava-account</code> overrides and a
+    legacy bearer-token webhook. The automated suite covers both; the live checklist in &sect;6
+    is written for stub mode with a Gateway-mode addendum.
+  </div>
+</div>
+
+<!-- ============ 3. APPROACH ============ -->
+<div class="section">
+  <h2><span class="num">3.</span>&nbsp; Test approach &amp; how to run</h2>
+
+  <h3>3.1 &nbsp; Automated (this report, &sect;4&ndash;&sect;5)</h3>
+  <p>
+    <code>pytest</code> with <code>pytest-asyncio</code>. Tests are unit / integration level:
+    service logic, permission-overwrite construction, event parsing and de-duplication, HMAC
+    signature verification, cross-squad isolation, disband cleanup and recovery, application
+    flows, season reset, and the protected-role guard. Repositories and Discord objects are
+    mocked, so the suite needs no live database or gateway connection and runs in ~1&nbsp;second.
+    <code>mypy</code> is run as a type-safety gate.
+  </p>
+  <table class="data tight"><thead><tr><th>Step</th><th>Command</th></tr></thead><tbody>
+    <tr><td>Install</td><td><code>python -m pip install -r requirements-dev.txt</code></td></tr>
+    <tr><td>Run tests</td><td><code>pytest -q</code></td></tr>
+    <tr><td>Type check</td><td><code>mypy src</code></td></tr>
+  </tbody></table>
+  <p>Both also run automatically as the <code>quality</code> stage in <code>.gitlab-ci.yml</code>.</p>
+
+  <h3>3.2 &nbsp; Manual / live-server (&sect;6)</h3>
+  <p>
+    Items that depend on a real Discord guild, real Discord API side effects (role/channel
+    creation, DMs), a running database, or the real MANAVA Gateway are listed as an executable
+    checklist in &sect;6 with explicit steps, expected results, and a result column for the
+    tester to complete.
+  </p>
+</div>
+
+<!-- ============ 4. RESULTS ============ -->
+<div class="section">
+  <h2><span class="num">4.</span>&nbsp; Automated test results</h2>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="n">89</div><div class="l">tests</div></div>
+    <div class="kpi"><div class="n">89</div><div class="l">passing</div></div>
+    <div class="kpi"><div class="n">0</div><div class="l">failing</div></div>
+    <div class="kpi"><div class="n">0</div><div class="l">mypy errors</div></div>
+  </div>
+
+  <p><code>89 passed in 1.34s</code> &nbsp;·&nbsp; <code>mypy src</code>: <em>Success: no issues found in 68 source files</em>.</p>
+
+  <h3>4.1 &nbsp; Results by test file</h3>
+  <table class="data tight"><thead><tr><th>Test file</th><th class="center nowrap">Tests</th><th>Area covered</th><th class="center">Result</th></tr></thead><tbody>
+    <tr><td><code>test_eligibility.py</code></td><td class="center">12</td><td>Squad-name validation; linked/verified failure message includes the MANAVA link URL when configured</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_capacity.py</code></td><td class="center">4</td><td>SQUADS category assignment: first with room, never by squad count, raise when all full</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_membership_flows.py</code></td><td class="center">4</td><td>Officer limit (max 2); officers can't promote peers; leader can't leave without transfer/disband; leader can't be removed</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_permission_isolation.py</code></td><td class="center">3</td><td><strong>Cross-squad isolation</strong> — officer overwrites are per-member and never leak between squads; member channels key off the squad-specific role only</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_disband_cleanup.py</code></td><td class="center">1</td><td>Disband strips the shared Squad Leader/Officer/Member rank roles from every member</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_squad_restore.py</code></td><td class="center">5</td><td><code>/admin restore-squad</code> — happy path, rejects active / purged / leader-elsewhere, rolls back the recreated role on DB failure</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_squad_xp_contribution.py</code></td><td class="center">4</td><td>Squad level advances past multiple thresholds / stays at L1 below the first; member-capacity allows below cap, blocks when full</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_discord_xp_cooldown.py</code></td><td class="center">8</td><td>Text-XP eligibility: 60s cooldown (before/at boundary/after), channel &amp; category exclusion, unrelated exclusions don't block</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_manava_event_dedup.py</code></td><td class="center">2</td><td><strong>Duplicate <code>event_id</code> never grants XP twice</strong>; an unresolved MANAVA user grants no XP</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_manava_event_parsing.py</code></td><td class="center">5</td><td>Gateway camelCase payloads (match / placement + <code>wonPrizeSlot</code>); legacy snake_case &amp; renamed types accepted; missing field / unknown type rejected</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_gateway_signature.py</code></td><td class="center">7</td><td>HMAC <code>x-manava-signature</code>: valid passes, tampered/wrong-secret/missing fails, signing secret beats legacy bearer, <strong>byte-for-byte match with the Gateway's <code>hmac-signer.ts</code></strong></td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_gateway_identity.py</code></td><td class="center">8</td><td>Identity payload mapping; <code>link_state</code> = OK / NOT_LINKED / NOT_VERIFIED; caches to <code>personal_xp</code>; falls back to cached value on Gateway error; stub-mode path</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_leaderboard_queries.py</code></td><td class="center">2</td><td>Global &amp; member leaderboard row&rarr;entry mapping (single query, no N+1)</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_season_reset.py</code></td><td class="center">3</td><td>Start-New zeroes Personal + Squad Season XP only (Lifetime untouched), actor audited; no-active-season path; end-with-none raises</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_application_flows.py</code></td><td class="center">6</td><td>Submit writes history + audit with <strong>no PII in the audit row</strong>; approve is one-way; more-info round-trip; role mapping (Developer / Creator / Streamer / Both); bad email creates nothing</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_application_cooldown.py</code></td><td class="center">4</td><td>One active application per type; 30-day post-reject cooldown enforced; past-cooldown and no-prior-reject allow</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_application_permissions.py</code></td><td class="center">3</td><td><strong>Reviewer boundary</strong> — Admin/MANAVA Team elevated; Moderator/Senior Moderator not; server-Administrator bootstrap fallback</td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_application_channel_config.py</code></td><td class="center">2</td><td>Per-type review-channel override round-trip; <code>finalize_submission</code> posts to the configured channel and falls back to <code>#applications-review</code></td><td class="center pass">PASS</td></tr>
+    <tr><td><code>test_protected_role_guard.py</code></td><td class="center">6</td><td><strong>Least privilege</strong> — the bot refuses to grant Admin / MANAVA Team / Senior Moderator / Moderator, before any Discord call; non-protected roles allowed</td><td class="center pass">PASS</td></tr>
+  </tbody></table>
+
+  <h3>4.2 &nbsp; Acceptance-criteria coverage matrix</h3>
+  <table class="data tight"><thead><tr><th>Acceptance criterion (project brief)</th><th>Automated coverage</th><th>Live check</th></tr></thead><tbody>
+    <tr><td>Eligible squad creation; every individual ineligible gate</td><td>name &amp; link-message gates (<code>test_eligibility</code>)</td><td>&sect;6.1</td></tr>
+    <tr><td>Duplicate name rejection; second-squad rejection</td><td>name reservation; one-active-membership index paths (<code>test_membership_flows</code>)</td><td>&sect;6.1</td></tr>
+    <tr><td>Apply / Invite / Approve / Reject</td><td>approve/reject re-check &amp; officer-limit logic</td><td>&sect;6.2</td></tr>
+    <tr><td>Leave / Remove; Promote / Demote; Transfer Leadership</td><td><code>test_membership_flows</code> (guards); leadership never lost</td><td>&sect;6.2</td></tr>
+    <tr><td>Disband / archive</td><td><code>test_disband_cleanup</code>; archive model doc</td><td>&sect;6.4</td></tr>
+    <tr><td>Category capacity enforcement</td><td><code>test_capacity</code> (4)</td><td>&mdash;</td></tr>
+    <tr><td><strong>Permission isolation between two squads</strong></td><td><code>test_permission_isolation</code> (3)</td><td>&sect;6.3</td></tr>
+    <tr><td>Valid text grants XP; too-short doesn't; cooldown enforced</td><td><code>test_discord_xp_cooldown</code> (8)</td><td>&sect;6.5</td></tr>
+    <tr><td>MANAVA event grants XP; <strong>duplicate never grants twice</strong></td><td><code>test_manava_event_dedup</code>, <code>test_manava_event_parsing</code></td><td>&sect;6.6 / &sect;6.10</td></tr>
+    <tr><td>Member vs non-member contribution; leave-then-join behaviour</td><td><code>test_squad_xp_contribution</code>; xp_service cascade design</td><td>&sect;6.5</td></tr>
+    <tr><td>Wave 1500 gate</td><td>gate wiring (<code>squad_eligibility</code>)</td><td>&sect;6.1</td></tr>
+    <tr><td>Season start / end / reset; Lifetime persists</td><td><code>test_season_reset</code> (3)</td><td>&sect;6.7</td></tr>
+    <tr><td>Application submission; Developer Pending assignment</td><td><code>test_application_flows</code></td><td>&sect;6.8</td></tr>
+    <tr><td>Request-More-Info round-trip; Approve / Reject; role assignment</td><td><code>test_application_flows</code> (round-trip, one-way, role map)</td><td>&sect;6.8</td></tr>
+    <tr><td>30-day reapplication cooldown</td><td><code>test_application_cooldown</code> (4)</td><td>&sect;6.8</td></tr>
+    <tr><td>Reviewer-permission boundary (Mod / Senior Mod blocked)</td><td><code>test_application_permissions</code> (3)</td><td>&sect;6.9</td></tr>
+    <tr><td>Application PII never in generic logs</td><td><code>test_application_flows</code> asserts audit row is PII-free</td><td>&mdash;</td></tr>
+    <tr><td>Bot never grants a protected role</td><td><code>test_protected_role_guard</code> (6)</td><td>&mdash;</td></tr>
+    <tr><td>Inbound webhook authentication</td><td><code>test_gateway_signature</code> (7)</td><td>&sect;6.10</td></tr>
+  </tbody></table>
+</div>
+
+<!-- ============ 5. INVENTORY ============ -->
+<div class="section">
+  <h2><span class="num">5.</span>&nbsp; Automated test inventory (evidence)</h2>
+  <p class="lead">Every test function, grouped by file. All 89 pass.</p>
+
+  <h3>Squads &mdash; eligibility, capacity, membership, isolation, lifecycle</h3>
+  <table class="data tight"><thead><tr><th>Test</th><th>Asserts</th></tr></thead><tbody>
+    <tr><td><code>test_validate_squad_name</code> &times;10</td><td>Length 3&ndash;32 and character-set rules accept/reject the right names</td></tr>
+    <tr><td><code>test_link_failure_message_includes_url_when_configured</code></td><td>&ldquo;link your account&rdquo; / &ldquo;confirm your email&rdquo; text carries <code>MANAVA_LINK_URL</code> when set, generic otherwise</td></tr>
+    <tr><td><code>test_picks_first_category_with_room</code></td><td>Assignment fills categories in order, purely by capacity</td></tr>
+    <tr><td><code>test_never_assigns_by_squad_count_beyond_capacity</code></td><td>10-squad / 40-channel cap per category is respected</td></tr>
+    <tr><td><code>test_empty_counts_defaults_to_first_category</code></td><td>First squad lands in <code>SQUADS 01</code></td></tr>
+    <tr><td><code>test_raises_when_all_categories_full</code></td><td>70-active-squad ceiling raises a friendly capacity error</td></tr>
+    <tr><td><code>test_promote_blocked_at_officer_limit</code></td><td>A 3rd officer promotion is rejected (max 2)</td></tr>
+    <tr><td><code>test_officer_cannot_promote_peers</code></td><td>Only the Leader can promote</td></tr>
+    <tr><td><code>test_leader_cannot_leave_without_transfer_or_disband</code></td><td>Leader-leave is blocked &mdash; a squad can never end up leaderless</td></tr>
+    <tr><td><code>test_cannot_remove_the_leader</code></td><td>The Leader cannot be removed by an officer</td></tr>
+    <tr><td><code>test_officer_overwrites_for_one_squad_never_include_another_squads_leader</code></td><td>Squad&nbsp;A's officer overwrites contain only Squad&nbsp;A people</td></tr>
+    <tr><td><code>test_officer_overwrites_never_leak_between_squads_officer_sets</code></td><td>Two squads' officer sets are disjoint in the built overwrites</td></tr>
+    <tr><td><code>test_member_overwrites_key_off_squad_specific_role_only</code></td><td>Member channels are gated by the squad-unique role, not the shared one</td></tr>
+    <tr><td><code>test_disband_strips_shared_rank_roles_from_every_member</code></td><td>On disband each member loses Squad Leader/Officer/Member; the squad role is deleted</td></tr>
+    <tr><td><code>test_restore_happy_path</code></td><td>Restore recreates the role, marks active, re-grants access, audits</td></tr>
+    <tr><td><code>test_restore_rejects_active_squad</code> / <code>&hellip;_after_channels_purged</code> / <code>&hellip;_when_former_leader_is_in_another_squad</code></td><td>Restore refuses the three invalid states with a user-facing message, no side effects</td></tr>
+    <tr><td><code>test_restore_rolls_back_recreated_role_if_db_step_fails</code></td><td>A DB failure after role creation deletes the orphan role (no partial state)</td></tr>
+    <tr><td><code>test_squad_level_advances_past_multiple_thresholds</code> / <code>&hellip;_stays_at_1_below_first_threshold</code></td><td>Level derived correctly from Lifetime Squad XP vs configurable thresholds</td></tr>
+    <tr><td><code>test_capacity_allows_new_member_below_cap</code> / <code>&hellip;_blocks_new_member_when_full</code></td><td>Per-level member cap enforced at join time</td></tr>
+  </tbody></table>
+
+  <h3>XP economy &amp; leaderboards</h3>
+  <table class="data tight"><thead><tr><th>Test</th><th>Asserts</th></tr></thead><tbody>
+    <tr><td><code>test_no_prior_grant_is_never_on_cooldown</code></td><td>First message from a user is always eligible</td></tr>
+    <tr><td><code>test_blocked_within_cooldown_window</code> / <code>test_allowed_exactly_at_boundary</code> / <code>test_allowed_once_cooldown_elapses</code></td><td>60-second per-user cooldown boundary behaviour</td></tr>
+    <tr><td><code>test_channel_directly_excluded</code> / <code>test_category_excluded_blocks_channel_inside_it</code></td><td>Channel and parent-category exclusion both suppress XP</td></tr>
+    <tr><td><code>test_no_category_and_not_excluded_is_eligible</code> / <code>test_unrelated_exclusions_do_not_block</code></td><td>Only listed channels/categories are excluded</td></tr>
+    <tr><td><code>test_duplicate_event_id_never_grants_xp_twice</code></td><td>Re-delivering the same <code>event_id</code> results in exactly one XP grant &mdash; hard correctness requirement</td></tr>
+    <tr><td><code>test_unresolved_manava_user_grants_no_xp</code></td><td>An event for an unknown MANAVA user is recorded but grants nothing</td></tr>
+    <tr><td><code>test_parses_gateway_match_completed_payload</code> / <code>&hellip;_placement_payload_with_prize_slot</code></td><td>Gateway camelCase payloads parse, incl. <code>place</code> and <code>wonPrizeSlot</code></td></tr>
+    <tr><td><code>test_legacy_snake_case_and_renamed_types_still_accepted</code></td><td>Pre-Gateway payloads and old event-type names still work (aliases)</td></tr>
+    <tr><td><code>test_missing_required_field_is_rejected</code> / <code>test_unknown_event_type_is_rejected</code></td><td>Malformed payloads produce a validation error, not a crash</td></tr>
+    <tr><td><code>test_global_leaderboard_maps_rows_to_entries</code> / <code>test_member_leaderboard_maps_rows_to_entries</code></td><td>Leaderboard queries map to typed entries in one pass</td></tr>
+  </tbody></table>
+
+  <h3>MANAVA Gateway integration</h3>
+  <table class="data tight"><thead><tr><th>Test</th><th>Asserts</th></tr></thead><tbody>
+    <tr><td><code>test_valid_signature_passes</code> / <code>test_tampered_body_fails</code> / <code>test_wrong_secret_fails</code> / <code>test_missing_signature_header_fails</code></td><td>HMAC-SHA256 <code>x-manava-signature</code> verification accepts only an untampered body signed with the shared secret</td></tr>
+    <tr><td><code>test_matches_gateway_signpayload_wire_format</code></td><td>Our verification is byte-identical to the Gateway's <code>hmac-signer.ts</code> over a realistic payload</td></tr>
+    <tr><td><code>test_legacy_bearer_used_only_without_signing_secret</code> / <code>test_signing_secret_takes_precedence_over_legacy</code></td><td>Clean cut-over: HMAC when the signing secret is set, legacy bearer only as a fallback</td></tr>
+    <tr><td><code>test_identity_from_payload_linked</code> / <code>&hellip;_not_linked_blanks_other_fields</code></td><td>Identity response mapping, including the not-linked case</td></tr>
+    <tr><td><code>test_link_state_distinguishes_unverified_from_unlinked</code> / <code>&hellip;_reports_not_linked_from_gateway</code> / <code>&hellip;_reports_not_verified_from_gateway</code></td><td><code>link_state</code> returns OK / NOT_LINKED / NOT_VERIFIED so the squad gate shows the right guidance</td></tr>
+    <tr><td><code>test_is_verified_uses_gateway_and_caches</code></td><td>A successful lookup caches <code>manava_user_id</code> + <code>verified_player</code> into <code>personal_xp</code></td></tr>
+    <tr><td><code>test_is_verified_falls_back_to_cache_on_gateway_error</code> / <code>test_is_verified_stub_mode_when_no_gateway</code></td><td>Gateway outage or stub mode falls back to the cached / manual value</td></tr>
+  </tbody></table>
+
+  <h3>Applications &amp; seasons</h3>
+  <table class="data tight"><thead><tr><th>Test</th><th>Asserts</th></tr></thead><tbody>
+    <tr><td><code>test_submit_records_history_and_keeps_pii_out_of_audit</code></td><td>Submission writes an <code>application_history</code> row and an audit row; the audit row contains no email / free-text PII</td></tr>
+    <tr><td><code>test_submit_rejects_bad_email_and_creates_nothing</code></td><td>An invalid contact email (or URL) is rejected server-side; <code>applications.insert</code> is never called</td></tr>
+    <tr><td><code>test_submit_blocked_by_existing_active</code></td><td>A second active application of the same type is refused</td></tr>
+    <tr><td><code>test_approve_is_one_way</code></td><td>A decided application cannot be re-decided</td></tr>
+    <tr><td><code>test_more_info_round_trip</code></td><td>Request-More-Info &rarr; applicant reply attaches to the same record and returns it to pending; only the real applicant can reply</td></tr>
+    <tr><td><code>test_roles_for_approval_and_pending_role</code></td><td>Developer &rarr; Developer (+ Pending); Creator / Streamer / Both &rarr; the right role(s), no Pending</td></tr>
+    <tr><td><code>test_active_application_blocks_new_one</code> / <code>test_recent_rejection_is_in_cooldown</code> / <code>test_rejection_past_cooldown_allows_reapply</code> / <code>test_no_prior_rejection_allows</code></td><td>30-day post-reject cooldown, enforced server-side</td></tr>
+    <tr><td><code>test_moderator_and_senior_moderator_are_not_elevated</code> / <code>test_admin_and_manava_team_are_elevated</code> / <code>test_server_administrator_permission_is_a_bootstrap_fallback</code></td><td>Only Admin / MANAVA Team (or a server Administrator) pass the review gate</td></tr>
+    <tr><td><code>test_set_and_get_review_channel_roundtrip</code></td><td>Per-type review-channel override stores and clears correctly in <code>bot_config</code></td></tr>
+    <tr><td><code>test_finalize_uses_configured_channel_then_falls_back</code></td><td>A configured type posts to its channel; an unconfigured type uses <code>#applications-review</code></td></tr>
+    <tr><td><code>test_start_new_season_resets_season_xp_only</code></td><td>Start-New zeroes Personal + Squad Season XP; Lifetime values are untouched; actor recorded</td></tr>
+    <tr><td><code>test_start_new_season_with_no_active_season</code></td><td>Start-New works even with no season currently active</td></tr>
+    <tr><td><code>test_end_season_with_none_active_raises</code></td><td>Ending with no active season raises a user-facing error</td></tr>
+  </tbody></table>
+
+  <h3>Security</h3>
+  <table class="data tight"><thead><tr><th>Test</th><th>Asserts</th></tr></thead><tbody>
+    <tr><td><code>test_ensure_assignable_blocks_every_protected_role</code> &times;4</td><td>Admin, MANAVA Team, Senior Moderator, Moderator each raise on an attempted grant</td></tr>
+    <tr><td><code>test_ensure_assignable_allows_non_protected_roles</code></td><td>Squad / application roles are grantable</td></tr>
+    <tr><td><code>test_assign_role_refuses_protected_before_touching_discord</code></td><td>The deny-list check happens before any Discord API call &mdash; no partial side effect</td></tr>
+  </tbody></table>
+</div>
+
+<!-- ============ 6. MANUAL CHECKLIST ============ -->
+<div class="section">
+  <h2><span class="num">6.</span>&nbsp; Manual / live-server acceptance checklist</h2>
+  <p class="lead">
+    Run once against a staging guild with the bot deployed and migrations applied. Unless noted,
+    these use <strong>stub mode</strong> (Gateway env vars unset) so <code>/admin set-verified</code>
+    acts as the linked/verified gate. You will need 2&ndash;3 Discord accounts (or alts) for the
+    membership flows. Tick <em>Result</em> as Pass / Fail and add notes.
+  </p>
+
+  <table class="data"><thead><tr><th style="width:4%">#</th><th style="width:30%">Case</th><th style="width:40%">Steps</th><th style="width:20%">Expected</th><th style="width:6%" class="center">Result</th></tr></thead><tbody>
+
+    <tr><td>6.1</td><td>Squad creation gate &mdash; each failure</td>
+      <td>With XP&nbsp;&lt;&nbsp;1500 / no Member role / unverified / already in a squad / a duplicate name, run <code>/squad create</code>.</td>
+      <td>Each failed gate is listed in one plain-language message; no squad created.</td><td class="center"></td></tr>
+
+    <tr><td>6.2</td><td>Eligible creation + membership flow</td>
+      <td><code>/admin set-verified</code> + <code>/admin add-xp 1500</code>, then <code>/squad create</code>. Second account <code>/squad apply</code> &rarr; approve via the DM buttons. Then <code>/squad invite</code>, <code>/squad promote</code> (3rd &rarr; blocked), <code>/squad demote</code>, <code>/squad remove</code>, <code>/squad transfer-leadership</code>.</td>
+      <td>Role + 4 channels created under a SQUADS category; applicant DM'd on approve; officer cap of 2 enforced; every destructive action asks to confirm; leadership always present.</td><td class="center"></td></tr>
+
+    <tr><td>6.3</td><td><strong>Cross-squad isolation</strong></td>
+      <td>Create two squads with different accounts. As an officer of squad&nbsp;A, try to open squad&nbsp;B's Officer Text channel.</td>
+      <td>Not visible / no access.</td><td class="center"></td></tr>
+
+    <tr><td>6.4</td><td>Disband &amp; archive; recovery</td>
+      <td><code>/squad disband</code> (confirm). Then <code>/admin restore-squad squad_name:&hellip;</code>.</td>
+      <td>Access revoked immediately, squad off <code>/leaderboard squads</code>, rank roles removed; channels remain (30-day window). Restore re-activates it, re-adds members, re-grants access.</td><td class="center"></td></tr>
+
+    <tr><td>6.5</td><td>Discord text XP</td>
+      <td>Post a &ge;10-char message in a normal channel; repeat within 60s; post a &lt;10-char message; post in an excluded channel.</td>
+      <td>+15 XP once; no XP on the repeat, the short message, or the excluded channel. Squad XP rises 1:1 while you're in a squad.</td><td class="center"></td></tr>
+
+    <tr><td>6.6</td><td>MANAVA event pipeline (harness)</td>
+      <td><code>/admin link-manava-account</code>, then <code>/xpconfig simulate-manava-event event_type:match_completed</code>. Repeat with a fixed <code>event_id</code> twice. Try <code>tournament_placement place:1</code>.</td>
+      <td>First run: <code>status=processed</code>, XP granted, Personal + Squad XP rise. Second identical run: <code>status=duplicate</code>, <code>xp_granted=0</code>. Placement grants participation + reward.</td><td class="center"></td></tr>
+
+    <tr><td>6.7</td><td>Seasons</td>
+      <td>Earn some XP. <code>/season start</code>, then <code>/season new</code> (confirm), then <code>/season status</code>.</td>
+      <td>Personal Season XP and Season Squad XP &rarr; 0 for all; Lifetime unchanged; an <code>audit_logs</code> row with <code>action = season.start_new</code> and the actor.</td><td class="center"></td></tr>
+
+    <tr><td>6.8</td><td>Developer application, end to end</td>
+      <td><code>/apply developer</code> &rarr; fill the form (try a bad email &rarr; Fix &amp; resubmit) &rarr; submit. In <code>#applications-review</code>: <strong>Request More Info</strong> &rarr; applicant replies via the DM button &rarr; <strong>Approve</strong>. Then <code>/apply developer</code> again immediately; and again after a Reject.</td>
+      <td>Developer Pending assigned; embed posted; a bad email blocks with Fix &amp; resubmit; more-info reply attaches to the same record; on approve Pending&rarr;Developer and applicant DM'd; a 2nd active application is blocked; after a Reject the 30-day cooldown message appears.</td><td class="center"></td></tr>
+
+    <tr><td>6.9</td><td>Reviewer permission boundary</td>
+      <td>As an account holding only <em>Moderator</em> (or Senior Moderator), click a review button; also check <code>/admin</code> visibility.</td>
+      <td>Review action refused (&ldquo;Only Admin / MANAVA Team&hellip;&rdquo;). <code>/admin</code>, <code>/xpconfig</code>, <code>/season</code> are hidden in the command picker for non-Administrators.</td><td class="center"></td></tr>
+
+    <tr><td>6.10</td><td>Persistence across restart</td>
+      <td>Submit a squad application and an app-review item, then <strong>restart the bot</strong>, then use the previously-posted buttons.</td>
+      <td>The Approve / Reject / Request-More-Info / Respond buttons still work after the restart.</td><td class="center"></td></tr>
+
+    <tr><td>6.11</td><td>DM-closed handling</td>
+      <td>With server DMs disabled, run <code>/squad apply</code>; and be the target of a squad-join or application decision.</td>
+      <td><code>/squad apply</code> is blocked with instructions to enable DMs; a decision maker is told the applicant couldn't be DM'd.</td><td class="center"></td></tr>
+
+    <tr><td>6.12</td><td><em>Gateway mode</em> (once MANAVA supplies credentials + registers the URL)</td>
+      <td>Set <code>MANAVA_GATEWAY_BASE_URL</code> / <code>DISCORD_BACKEND_API_KEY</code> / <code>WEBHOOK_SIGNING_SECRET</code>, restart. <code>/admin gateway refresh-identity user:@you</code>. Have MANAVA fire a real event; then have it redelivered.</td>
+      <td><code>/admin status</code> shows &ldquo;Gateway&rdquo; mode + HMAC auth. Identity returns the expected linked/verified. The real event grants XP and writes a <code>processed_events</code> row; the redelivery grants nothing.</td><td class="center"></td></tr>
+  </tbody></table>
+</div>
+
+<!-- ============ 7. FAILURE SCENARIOS ============ -->
+<div class="section">
+  <h2><span class="num">7.</span>&nbsp; Failure-scenario coverage</h2>
+  <table class="data tight"><thead><tr><th>Scenario</th><th>Handling</th><th>Evidence</th></tr></thead><tbody>
+    <tr><td>Duplicate / retried MANAVA event</td><td><code>event_id</code> reserved in <code>processed_events</code> before any XP is computed &mdash; guaranteed single grant</td><td><code>test_manava_event_dedup</code>; &sect;6.6</td></tr>
+    <tr><td>Malformed / unauthenticated webhook</td><td>Bad HMAC &rarr; 401; malformed body &rarr; 400 (Gateway retries then dead-letters)</td><td><code>test_gateway_signature</code>, <code>test_manava_event_parsing</code></td></tr>
+    <tr><td>MANAVA / Gateway unavailable</td><td>Identity lookup falls back to the cached / manual value; the Gateway's own outbox re-delivers events when it recovers</td><td><code>test_gateway_identity</code></td></tr>
+    <tr><td>Supabase outage</td><td>Commands surface a friendly error; the webhook returns 503 so the Gateway retries; <code>with_db_retry</code> covers transient blips; <code>/healthz</code> stays up</td><td><code>src/db/retry.py</code>, <code>src/web/webhook_server.py</code></td></tr>
+    <tr><td>Bot restart mid-flow</td><td>Persistent views re-registered in <code>setup_hook</code>; button state is carried in the <code>custom_id</code> / re-resolved from the DB, not held in memory</td><td>&sect;6.10</td></tr>
+    <tr><td>Missing Discord permission / deleted channel or role</td><td><code>role_safety</code> maps <code>Forbidden</code> to a friendly message; a deleted review channel falls back to <code>#applications-review</code>; a deleted squad channel raises a &ldquo;contact staff&rdquo; error rather than crashing</td><td><code>test_protected_role_guard</code>; recovery doc</td></tr>
+    <tr><td>Partial squad create / delete</td><td>Discord objects are rolled back if the DB insert fails; restore deletes the recreated role if its DB step fails</td><td><code>test_squad_restore</code>; <code>squad_lifecycle.create_squad</code></td></tr>
+    <tr><td>Lost leadership</td><td>Leader-leave blocked; transfer always assigns exactly one Leader; disband closes all memberships</td><td><code>test_membership_flows</code></td></tr>
+    <tr><td>Duplicate bot instance</td><td>Documented &mdash; single instance only, no leader election</td><td>&sect;8</td></tr>
+  </tbody></table>
+</div>
+
+<!-- ============ 8. LIMITATIONS ============ -->
+<div class="section">
+  <h2><span class="num">8.</span>&nbsp; Known limitations &amp; items pending external input</h2>
+
+  <h3>8.1 &nbsp; Accepted / by design</h3>
+  <table class="data tight"><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody>
+    <tr><td>Discord text-XP cooldown is in-memory</td><td>The 60-second per-user cooldown resets on restart &mdash; at most one extra grant right after a redeploy. Accepted trade-off.</td></tr>
+    <tr><td>Text-XP grants are best-effort during a DB outage</td><td>Logged and dropped, not queued.</td></tr>
+    <tr><td>Application field validation is format-only, post-submit</td><td>Discord modals can't validate inline; email / URL are checked on submit, with a &ldquo;Fix &amp; resubmit&rdquo; recovery. No deliverability checks &mdash; reviewer's call.</td></tr>
+    <tr><td>Application modal is a 3-step flow</td><td>Discord's 5-input modal limit forces select menus &rarr; modal &rarr; optional comments.</td></tr>
+    <tr><td>Season resets are not snapshotted</td><td>The reset is audited (actor + counts) but final standings aren't stored. Export the leaderboard before <code>/season new</code> if a record is wanted.</td></tr>
+    <tr><td><code>contributed_xp</code> is lifetime-of-stint, not seasonal</td><td>Per spec, a season reset does not touch it.</td></tr>
+    <tr><td>Archived squads keep inaccessible channels for 30 days</td><td>Then a daily job purges them. Recovery via <code>/admin restore-squad</code> within the window.</td></tr>
+    <tr><td>Single instance only</td><td>Two processes on the same token would double-process. No leader election.</td></tr>
+    <tr><td>Gateway identity cache is lazy</td><td>An event for a MANAVA user the bot has never looked up is recorded as <code>unresolved_user</code> and grants no XP until an identity lookup warms the cache. Client confirmed acceptable for launch.</td></tr>
+  </tbody></table>
+
+  <h3>8.2 &nbsp; Pending external input (not verifiable until MANAVA provides it)</h3>
+  <table class="data tight"><thead><tr><th>Item</th><th>Owner</th></tr></thead><tbody>
+    <tr><td>Real <code>DISCORD_BACKEND_API_KEY</code> and <code>WEBHOOK_SIGNING_SECRET</code></td><td>MANAVA</td></tr>
+    <tr><td>Registering this deployment's <code>/webhooks/manava</code> URL with the Gateway (guarded by MANAVA's internal key)</td><td>MANAVA</td></tr>
+    <tr><td>A value for <code>prize_slot_bonus_xp</code> (currently <code>0</code> &mdash; <code>wonPrizeSlot</code> is inert until set via <code>/xpconfig set-xp</code>)</td><td>MANAVA</td></tr>
+    <tr><td>Production MANAVA account-linking URL for <code>MANAVA_LINK_URL</code> (demo URL is configured)</td><td>MANAVA</td></tr>
+    <tr><td>Live end-to-end run of the &sect;6 checklist on the staging guild</td><td>MANAVA QA</td></tr>
+  </tbody></table>
+</div>
+
+<!-- ============ 9. SIGN-OFF ============ -->
+<div class="section">
+  <h2><span class="num">9.</span>&nbsp; Sign-off</h2>
+  <p>
+    The automated suite (89 tests) and type check pass on build <code>97a8b39</code>. The manual
+    acceptance checklist in &sect;6 is ready for execution on the staging guild.
+  </p>
+
+  <table class="data signoff"><thead><tr><th style="width:22%">Role</th><th style="width:26%">Name</th><th style="width:32%">Signature</th><th style="width:20%">Date</th></tr></thead><tbody>
+    <tr><td>Developer (build &amp; automated QA)</td><td>Muhammad Nadeem</td><td></td><td></td></tr>
+    <tr><td>MANAVA QA (&sect;6 execution)</td><td></td><td></td><td></td></tr>
+    <tr><td>MANAVA acceptance</td><td></td><td></td><td></td></tr>
+  </tbody></table>
+
+  <div class="footer-note">
+    MANAVA Multiverse Discord Bot &mdash; QA Report &amp; Acceptance Test Handover &mdash;
+    build <code>97a8b39</code> &mdash; 6 September 2026. Companion documents in <code>docs/</code>.
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,5 +1,11 @@
 # QA report
 
+> **Presented version:** `MANAVA-Bot-QA-Handover.pdf` (in this folder) is the
+> formatted handover document for the client — same substance as this file,
+> plus an executable live-server checklist with a result column and a sign-off
+> page. Regenerate it from `MANAVA-Bot-QA-Handover.html` with
+> `chrome --headless --no-pdf-header-footer --print-to-pdf=... file:///…html`.
+
 `pytest` — **89 passing**, `mypy src` clean (`pytest.ini` sets
 `asyncio_mode = auto`). Unit-level: service logic, permission-overwrite
 construction, event parsing/dedup, HMAC signature verification, cross-squad

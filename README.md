@@ -108,7 +108,7 @@ from anyone without the Discord **Administrator** permission (a non-Administrato
 | `docs/archive-model.md` | Why disbanded squads keep inaccessible channels for 30 days, then purge |
 | `docs/known-limitations.md` | Things that work as designed but a maintainer should know |
 | `docs/deferred-items.md` | Explicitly out-of-scope items + deferred work + stubs awaiting external input |
-| `docs/qa-report.md` | Acceptance checklist mapped to tests / manual scripts |
+| `docs/qa-report.md` + `docs/MANAVA-Bot-QA-Handover.pdf` | Acceptance checklist mapped to tests; the PDF is the formatted client handover (results, evidence inventory, live-server checklist, sign-off) |
 | `docs/manava-webhook-contract.md` | Superseded — historical record of the pre-Gateway stub |
 
 ## Deployment
