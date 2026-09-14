@@ -24,18 +24,32 @@ async def get(conn: asyncpg.Connection, squad_id: UUID) -> SquadXp:
     return _row_to_squad_xp(row)
 
 
-async def add_xp(conn: asyncpg.Connection, squad_id: UUID, amount: int) -> SquadXp:
+async def add_xp(conn: asyncpg.Connection, squad_id: UUID, amount: int, *, season_active: bool) -> SquadXp:
+    """season_xp only moves while a season is active — see personal_xp.add_xp
+    for why. lifetime_xp always moves."""
     await ensure_row(conn, squad_id)
-    row = await conn.fetchrow(
-        """
-        update squad_xp
-        set lifetime_xp = lifetime_xp + $2, season_xp = season_xp + $2, updated_at = now()
-        where squad_id = $1
-        returning *
-        """,
-        squad_id,
-        amount,
-    )
+    if season_active:
+        row = await conn.fetchrow(
+            """
+            update squad_xp
+            set lifetime_xp = lifetime_xp + $2, season_xp = season_xp + $2, updated_at = now()
+            where squad_id = $1
+            returning *
+            """,
+            squad_id,
+            amount,
+        )
+    else:
+        row = await conn.fetchrow(
+            """
+            update squad_xp
+            set lifetime_xp = lifetime_xp + $2, updated_at = now()
+            where squad_id = $1
+            returning *
+            """,
+            squad_id,
+            amount,
+        )
     assert row is not None
     return _row_to_squad_xp(row)
 

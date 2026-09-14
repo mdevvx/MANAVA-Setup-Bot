@@ -16,7 +16,7 @@ Custom Discord bot for the MANAVA Multiverse server:
 - **MANAVA Gateway integration** — identity lookup + HMAC-signed inbound event
   webhooks (`docs/manava-gateway-integration.md`).
 
-Python 3.11+ / discord.py 2.x / Supabase Postgres via `asyncpg`. **89 unit
+Python 3.11+ / discord.py 2.x / Supabase Postgres via `asyncpg`. **97 unit
 tests, `mypy src` clean.**
 
 ---
@@ -108,7 +108,8 @@ from anyone without the Discord **Administrator** permission (a non-Administrato
 | `docs/archive-model.md` | Why disbanded squads keep inaccessible channels for 30 days, then purge |
 | `docs/known-limitations.md` | Things that work as designed but a maintainer should know |
 | `docs/deferred-items.md` | Explicitly out-of-scope items + deferred work + stubs awaiting external input |
-| `docs/qa-report.md` + `docs/MANAVA-Bot-QA-Handover.pdf` | Acceptance checklist mapped to tests; the PDF is the formatted client handover (results, evidence inventory, live-server checklist, sign-off) |
+| `docs/MANAVA-Bot-Guide.pdf` | Formatted client handover — per-milestone implementation, full command reference, and end-to-end feature flows (source: `MANAVA-Bot-Guide.html`) |
+| `docs/qa-report.md` | Internal QA report — every acceptance-test item mapped to its automated coverage, plus the live-server manual checklist |
 | `docs/manava-webhook-contract.md` | Superseded — historical record of the pre-Gateway stub |
 
 ## Deployment
@@ -172,7 +173,7 @@ Dockerfile  .dockerignore  .gitlab-ci.yml  mypy.ini  pytest.ini
 ## Tests
 
 ```bash
-pytest              # 89 tests
+pytest              # 97 tests
 mypy src            # clean
 ```
 

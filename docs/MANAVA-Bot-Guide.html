@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MANAVA Multiverse Bot — Implementation &amp; Command Guide</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+
+  :root {
+    --ink: #1a1c22;
+    --soft: #4a4f5c;
+    --muted: #7b8091;
+    --rule: #d7dae2;
+    --rule-soft: #e9ebf1;
+    --accent: #2f5bd0;
+    --accent-tint: #eef2fc;
+    --band: #f4f5f8;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
+    font-size: 10.4pt; line-height: 1.5; color: var(--ink); margin: 0;
+  }
+
+  h1, h2, h3, h4 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; color: var(--ink); }
+  h2 { font-size: 15pt; margin: 0 0 6pt; padding-bottom: 4pt; border-bottom: 2px solid var(--ink); }
+  h2 .num { color: var(--accent); }
+  h3 { font-size: 11.5pt; margin: 15pt 0 4pt; }
+  h4 { font-size: 10.4pt; margin: 11pt 0 3pt; font-family: "Segoe UI", sans-serif; }
+  p { margin: 0 0 7pt; }
+  ul { margin: 0 0 8pt; padding-left: 16pt; }
+  li { margin: 0 0 3pt; }
+  code { font-family: "Consolas", "SFMono-Regular", monospace; font-size: 9pt;
+         background: var(--band); padding: 0.5pt 3pt; border-radius: 3px; }
+  strong { font-weight: 600; }
+
+  .section { page-break-before: always; padding-top: 2pt; }
+  .section:first-of-type { page-break-before: avoid; }
+  .lead { color: var(--soft); }
+  .avoid-break { page-break-inside: avoid; }
+
+  /* Cover */
+  .cover { height: 244mm; display: flex; flex-direction: column; page-break-after: always; }
+  .cover .rule { height: 4px; background: var(--ink); margin-bottom: 26pt; }
+  .cover .eyebrow { font-family: "Consolas", monospace; letter-spacing: 0.18em;
+                    text-transform: uppercase; font-size: 8.5pt; color: var(--muted); }
+  .cover h1 { font-size: 30pt; line-height: 1.12; margin: 10pt 0 6pt; }
+  .cover .subtitle { font-size: 13pt; color: var(--soft); font-family: Georgia, serif; }
+  .cover .spacer { flex: 1; }
+  .meta { width: 100%; border-collapse: collapse; font-size: 9.6pt; }
+  .meta td { padding: 5pt 0; border-top: 1px solid var(--rule-soft); vertical-align: top; }
+  .meta td:first-child { color: var(--muted); width: 32%;
+    font-family: "Consolas", monospace; font-size: 8.6pt; letter-spacing: 0.04em;
+    text-transform: uppercase; padding-top: 6pt; }
+
+  /* Tables */
+  table.data { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 9.3pt; }
+  table.data th {
+    background: var(--ink); color: #fff; text-align: left; font-weight: 600;
+    padding: 5pt 7pt; font-size: 8.7pt;
+  }
+  table.data td { padding: 4.5pt 7pt; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  table.data tbody tr:nth-child(even) td { background: var(--band); }
+  table.data thead { display: table-header-group; }
+  table.data tr { page-break-inside: avoid; }
+  table.data td code { white-space: nowrap; }
+
+  /* TOC */
+  .toc { font-size: 10pt; }
+  .toc td { padding: 4pt 0; border-bottom: 1px dotted var(--rule); }
+  .toc td:last-child { text-align: right; color: var(--muted); font-family: "Consolas", monospace; font-size: 8.5pt; }
+
+  /* Flow — numbered steps with a left rail */
+  .flow { counter-reset: step; margin: 4pt 0 12pt; padding: 0; list-style: none; }
+  .flow > li {
+    position: relative; padding: 3pt 0 6pt 26pt; margin: 0;
+    border-left: 2px solid var(--rule); page-break-inside: avoid;
+  }
+  .flow > li:last-child { border-left-color: transparent; }
+  .flow > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: -11pt; top: 1pt;
+    width: 18pt; height: 18pt; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-family: "Segoe UI", sans-serif; font-size: 8.5pt; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .flow .r { color: var(--soft); }
+
+  .callout {
+    border: 1px solid var(--rule); border-left: 4px solid var(--accent);
+    background: var(--accent-tint); padding: 9pt 12pt; margin: 8pt 0 12pt; font-size: 9.6pt;
+  }
+  .callout h4 { margin: 0 0 3pt; }
+
+  .who { display: inline-block; font-size: 7.6pt; font-weight: 700; letter-spacing: 0.03em;
+         text-transform: uppercase; padding: 1.5pt 5pt; border-radius: 3px;
+         background: var(--band); color: var(--soft); border: 1px solid var(--rule); }
+
+  .footer-note { font-size: 8pt; color: var(--muted); border-top: 1px solid var(--rule-soft);
+                 padding-top: 6pt; margin-top: 14pt; }
+</style>
+</head>
+<body>
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <div class="rule"></div>
+  <div class="eyebrow">Client Handover</div>
+  <h1>MANAVA Multiverse<br>Discord Bot</h1>
+  <div class="subtitle">Implementation &amp; Command Guide</div>
+
+  <div class="spacer"></div>
+
+  <table class="meta">
+    <tr><td>Project</td><td>MANAVA Multiverse — custom Discord bot: squad system, unified XP &amp; leaderboard economy, application review workflows, MANAVA Gateway integration</td></tr>
+    <tr><td>Scope</td><td>Milestone 1 (Squads) · Milestone 2 (XP &amp; MANAVA) · Milestone 3 (Applications, Seasons, Reliability, Handover)</td></tr>
+    <tr><td>Build</td><td><code>718a6d3</code> · branch <code>main</code></td></tr>
+    <tr><td>Date</td><td>7 September 2026</td></tr>
+    <tr><td>Runtime</td><td>Python 3.11+ · discord.py 2.x · Supabase Postgres</td></tr>
+    <tr><td>Prepared by</td><td>Muhammad Nadeem</td></tr>
+    <tr><td>Recipient</td><td>MANAVA</td></tr>
+  </table>
+
+  <div class="footer-note">
+    This guide describes what each milestone delivers, every command and who can run it, and the
+    main user flows. Companion technical docs live in the repository's <code>docs/</code> folder
+    (<code>command-reference.md</code>, <code>schema.md</code>, <code>deployment.md</code>,
+    <code>recovery.md</code>, <code>manava-gateway-integration.md</code>, <code>logging.md</code>).
+  </div>
+</div>
+
+<!-- ===================== OVERVIEW / TOC ===================== -->
+<div class="section">
+  <h2><span class="num">1.</span>&nbsp; Overview</h2>
+  <p>
+    The bot adds four capabilities on top of the existing MANAVA Multiverse server:
+  </p>
+  <ul>
+    <li><strong>Squads</strong> — members form esports teams. Each squad gets its own role and four
+      channels (member text/voice, officer text/voice), created automatically and placed in the
+      <code>⚔️〔SQUADS 01〕</code>…<code>07</code> categories.</li>
+    <li><strong>Unified XP economy</strong> — one Personal XP balance per member, earned from
+      Discord chat activity and from MANAVA gameplay events. It has a Lifetime counter (never resets)
+      and a Season counter (reset when a new season starts). A member's XP also flows 1:1 into their
+      current squad's XP.</li>
+    <li><strong>Leaderboards</strong> — a global squad leaderboard (ranked by Season XP, top 32
+      badged) and a per-squad member leaderboard, both shown on demand.</li>
+    <li><strong>Applications</strong> — Developer and Creator/Streamer application forms with a
+      review workflow (Approve / Reject / Request More Info) in a private staff channel.</li>
+  </ul>
+  <p>
+    Seasons are started and reset manually by staff. MANAVA account status ("Verified Player")
+    and gameplay events come from the <strong>MANAVA Gateway</strong>; until MANAVA supplies
+    credentials the bot runs in a <strong>stub mode</strong> with manual admin overrides.
+  </p>
+
+  <table class="toc">
+    <tr><td>1 &nbsp; Overview</td><td>this page</td></tr>
+    <tr><td>2 &nbsp; Milestone 1 — Squad system</td><td>&sect;2</td></tr>
+    <tr><td>3 &nbsp; Milestone 2 — XP economy, leaderboards &amp; MANAVA integration</td><td>&sect;3</td></tr>
+    <tr><td>4 &nbsp; Milestone 3 — Applications, seasons, account linking, reliability</td><td>&sect;4</td></tr>
+    <tr><td>5 &nbsp; Command reference</td><td>&sect;5</td></tr>
+    <tr><td>6 &nbsp; Configuration &amp; tunable values</td><td>&sect;6</td></tr>
+    <tr><td>7 &nbsp; Server prerequisites &amp; operating notes</td><td>&sect;7</td></tr>
+    <tr><td>8 &nbsp; MANAVA Gateway integration</td><td>&sect;8</td></tr>
+    <tr><td>9 &nbsp; Known limitations &amp; items owned by MANAVA</td><td>&sect;9</td></tr>
+  </table>
+</div>
+
+<!-- ===================== MILESTONE 1 ===================== -->
+<div class="section">
+  <h2><span class="num">2.</span>&nbsp; Milestone 1 — Squad system</h2>
+
+  <h3>2.1 &nbsp; What it delivers</h3>
+  <ul>
+    <li><strong>Gated squad creation.</strong> A member can create a squad only if they: hold the
+      <strong>Member</strong> role, have <strong>≥ 1500 Personal Lifetime XP</strong>, are a
+      <strong>Verified Player</strong> (linked MANAVA account with a confirmed email), are
+      <strong>not already in or leading another active squad</strong>, and chose a
+      <strong>valid, unused name</strong> (3–32 characters; letters, numbers, spaces, hyphens,
+      underscores). Every failed check is reported back in one plain-language message.</li>
+    <li><strong>Automatic Discord objects.</strong> On creation the bot makes one squad-specific
+      role and four channels — Member Text, Member Voice, Officer Text, Officer Voice — inside the
+      first <code>SQUADS 0N</code> category with room.</li>
+    <li><strong>Capacity limits.</strong> 10 squads (40 channels) per category, 7 categories → a
+      ceiling of <strong>70 active squads</strong>. Assignment is purely by free space, never by
+      rank. Creating past the ceiling fails with a "server at capacity, contact staff" message.</li>
+    <li><strong>Roles &amp; leadership.</strong> Every member holds the squad role + the shared
+      <strong>Squad Member</strong> rank role; the leader also holds <strong>Squad Leader</strong>;
+      officers hold <strong>Squad Officer</strong> (max 2 per squad).</li>
+    <li><strong>Channel visibility.</strong> Member channels are visible to that squad's members and
+      to staff (Admin, MANAVA Team, Senior Moderator, Moderator). Officer channels are visible only
+      to that squad's Leader + Officers and staff.</li>
+    <li><strong>Cross-squad isolation.</strong> Officer-channel access is granted per individual
+      member, not via the shared "Squad Officer" role, so an officer of one squad can never see
+      another squad's officer channels.</li>
+    <li><strong>Safe destructive actions.</strong> Remove, Demote, Transfer Leadership and Disband
+      all require an explicit <strong>Confirm / Cancel</strong> step — nothing fires on the first
+      click. A squad can never be left without a Leader.</li>
+    <li><strong>Disband &amp; 30-day archive.</strong> On disband, access is revoked immediately and
+      the squad drops off the leaderboard, but the channels stay (hidden) for 30 days before a daily
+      job deletes them. The squad record, its XP history and audit trail are kept permanently, and
+      the name stays reserved forever. Within the 30-day window a squad can be fully restored
+      (<code>/admin restore-squad</code>).</li>
+  </ul>
+
+  <h3>2.2 &nbsp; Flows</h3>
+
+  <h4>Create a squad</h4>
+  <ol class="flow">
+    <li>Member runs <code>/squad create name:&lt;name&gt;</code>.</li>
+    <li>The bot checks every eligibility gate. <span class="r">If any fail, it lists them and stops — nothing is created.</span></li>
+    <li>The squad role and four channels are created in the first category with space; the creator is made Leader.</li>
+    <li>The creator gets a confirmation (and a note if their DMs are closed, since join requests arrive by DM).</li>
+  </ol>
+
+  <h4>Apply and join</h4>
+  <ol class="flow">
+    <li>Member runs <code>/squad apply squad_name:&lt;name&gt;</code> (name auto-completes from active squads).</li>
+    <li>The bot checks the applicant isn't already in a squad and that it can DM them, then records the request and DMs a receipt.</li>
+    <li>The squad's Leader and Officers each get a DM with <strong>Approve</strong> / <strong>Reject</strong> buttons.</li>
+    <li>A reviewer clicks a button. On <strong>Approve</strong> the bot re-checks the one-squad rule and the level's member cap, then assigns the squad role + Squad Member and grants channel access.</li>
+    <li>The applicant is DMed the decision. <span class="r">The buttons keep working even after a bot restart.</span></li>
+  </ol>
+
+  <h4>Manage members</h4>
+  <ol class="flow">
+    <li><strong>Invite</strong> — a Leader/Officer runs <code>/squad invite user:@member</code>; the same one-squad and capacity checks apply, then the member is added directly.</li>
+    <li><strong>Promote / Demote</strong> — the Leader runs <code>/squad promote</code> / <code>/squad demote</code>. Promote is capped at 2 officers; Demote asks to confirm.</li>
+    <li><strong>Remove</strong> — a Leader/Officer runs <code>/squad remove user:@member [reason]</code>, confirms, and the member loses roles and access. The Leader can't be removed.</li>
+    <li><strong>Leave</strong> — any member runs <code>/squad leave</code> (no cooldown; they can join another squad immediately). A Leader must transfer or disband first.</li>
+  </ol>
+
+  <h4>Transfer leadership &amp; disband</h4>
+  <ol class="flow">
+    <li><strong>Transfer</strong> — the Leader runs <code>/squad transfer-leadership user:@member</code> and confirms. Leadership moves; the outgoing Leader becomes an Officer if there's room, otherwise a Member.</li>
+    <li><strong>Disband</strong> — the Leader runs <code>/squad disband [reason]</code> and confirms. Access and rank roles are removed at once, the squad leaves the leaderboard, and a 30-day archive timer starts.</li>
+    <li><strong>Restore (staff)</strong> — within 30 days, <code>/admin restore-squad squad_name:&lt;name&gt;</code> recreates the role, re-activates the squad, re-adds the members it had, and restores access. Members who have since joined another squad are skipped; if the former Leader has, the restore is refused until that's resolved.</li>
+  </ol>
+</div>
+
+<!-- ===================== MILESTONE 2 ===================== -->
+<div class="section">
+  <h2><span class="num">3.</span>&nbsp; Milestone 2 — XP economy, leaderboards &amp; MANAVA integration</h2>
+
+  <h3>3.1 &nbsp; Unified Personal XP</h3>
+  <ul>
+    <li>One balance per member, fed by two sources: <strong>Discord chat</strong> and
+      <strong>MANAVA gameplay events</strong>. Every gain increases both the
+      <strong>Lifetime</strong> counter (never reset — this is what the 1500 squad-creation gate
+      reads) and the <strong>Season</strong> counter (reset by "Start New Season").</li>
+    <li><strong>Discord chat XP:</strong> +15 XP for a message of at least 10 characters, with a
+      60-second per-member cooldown. Only counts in normal channels — an admin-managed exclusion
+      list removes staff / log / bot / applications channels (individual channels or whole
+      categories). A single message can never grant XP twice.</li>
+    <li>Voice XP is intentionally not implemented (out of scope).</li>
+  </ul>
+
+  <h3>3.2 &nbsp; Squad XP &amp; member capacity</h3>
+  <ul>
+    <li>Each squad has <strong>Lifetime Squad XP</strong> (permanent) and <strong>Season Squad
+      XP</strong> (seasonal). When a <em>current</em> member earns +X Personal XP, +X is added to
+      both squad counters and to that member's contribution figure.</li>
+    <li>XP earned before joining is never back-filled; XP already contributed stays with the squad
+      after the member leaves.</li>
+    <li>A squad's <strong>level</strong> (1–7) is derived from its Lifetime Squad XP against
+      configurable thresholds, and the level sets the <strong>member cap</strong>:</li>
+  </ul>
+  <table class="data avoid-break">
+    <thead><tr><th>Level</th><th>Lifetime Squad XP required (default)</th><th>Member cap</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>— (starting level)</td><td>20</td></tr>
+      <tr><td>2</td><td>5,000</td><td>50</td></tr>
+      <tr><td>3</td><td>15,000</td><td>100</td></tr>
+      <tr><td>4</td><td>40,000</td><td>200</td></tr>
+      <tr><td>5</td><td>100,000</td><td>300</td></tr>
+      <tr><td>6</td><td>250,000</td><td>500</td></tr>
+      <tr><td>7</td><td>600,000</td><td>1,000</td></tr>
+    </tbody>
+  </table>
+  <p class="lead">Thresholds are editable with <code>/xpconfig set-threshold</code>; the member caps are fixed by specification.</p>
+
+  <h3>3.3 &nbsp; MANAVA gameplay events</h3>
+  <p>
+    MANAVA's Gateway pushes one signed webhook per event to the bot. Three event types are consumed:
+    <strong>match completed</strong>, <strong>tournament registered</strong>, and
+    <strong>tournament placement</strong> (which also carries the finishing place and whether the
+    player won a paid prize slot). Each event grants a configurable amount of XP.
+  </p>
+  <p>Every event is processed in a fixed order, and a repeated event is a guaranteed no-op:</p>
+  <ol class="flow">
+    <li>Verify the request signature (or reject it).</li>
+    <li>Validate the payload shape.</li>
+    <li>Check the event id against the processed-events log — <strong>if already seen, stop and grant nothing</strong>.</li>
+    <li>Resolve the MANAVA player to a Discord member. <span class="r">If unknown, record the event and grant nothing.</span></li>
+    <li>Compute the XP for the event type and apply it to Personal Lifetime + Season XP, and to Squad XP if the member is in a squad.</li>
+    <li>Mark the event id processed and write a log entry.</li>
+  </ol>
+  <p class="lead">
+    A test harness — <code>/xpconfig simulate-manava-event</code> — runs a synthetic event through
+    this exact pipeline so the whole flow can be exercised before MANAVA's side is live.
+  </p>
+
+  <h3>3.4 &nbsp; XP configuration</h3>
+  <p>
+    XP amounts and level thresholds are stored in the database, not in code, and are changed live
+    with <code>/xpconfig set-xp</code> / <code>set-threshold</code> — no redeploy. Defaults:
+  </p>
+  <table class="data avoid-break">
+    <thead><tr><th>Setting</th><th>Key</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td>Match completed</td><td><code>skill_match_xp</code></td><td>50</td></tr>
+      <tr><td>Tournament registered / participation base</td><td><code>tournament_participation_xp</code></td><td>100</td></tr>
+      <tr><td>Placement bonus — 1st / 2nd / 3rd</td><td><code>placement_reward_1&nbsp;/&nbsp;2&nbsp;/&nbsp;3</code></td><td>500 / 300 / 150</td></tr>
+      <tr><td>Prize-slot bonus (added when <code>wonPrizeSlot</code> is true)</td><td><code>prize_slot_bonus_xp</code></td><td>0 <span class="lead">(inert until MANAVA sets it)</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.5 &nbsp; Leaderboards</h3>
+  <ul>
+    <li><strong>Global squad leaderboard</strong> — active squads ranked by Season Squad XP, with
+      the top 32 badged. No automatic qualification or bracket sync (out of scope).</li>
+    <li><strong>Per-squad member leaderboard</strong> — rank, member, Personal Lifetime XP,
+      Personal Season XP, and contribution to the squad.</li>
+    <li>Both are on-demand slash commands and use a single efficient query each.</li>
+  </ul>
+</div>
+
+<!-- ===================== MILESTONE 3 ===================== -->
+<div class="section">
+  <h2><span class="num">4.</span>&nbsp; Milestone 3 — Applications, seasons, account linking, reliability</h2>
+
+  <h3>4.1 &nbsp; Applications</h3>
+  <p>Two application types, both reviewed in a private staff channel (<code>#applications-review</code> by default; per-type channels can be set with <code>/admin set-application-channel</code>).</p>
+
+  <table class="data avoid-break">
+    <thead><tr><th>Type</th><th>Fields collected</th><th>On approval</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Developer</strong><br><code>/apply developer</code></td>
+        <td>Company / Studio · Project / Game · Website / Portfolio URL · Integration Interest
+          (dropdown) · Relevant Experience · Contact Email · optional Additional Comments.
+          Discord id, username and timestamp are captured automatically.</td>
+        <td>Removes <strong>Developer Pending</strong>, assigns <strong>Developer</strong>.</td>
+      </tr>
+      <tr>
+        <td><strong>Creator / Streamer</strong><br><code>/apply creator-streamer</code></td>
+        <td>Profile Type (Creator / Streamer / Both) · Primary Platform · Region · Audience Size
+          (dropdowns) · Profile / Channel URL · Content Languages · Average Views / Live Viewers ·
+          Content Examples · Contact Email · optional Additional Comments.</td>
+        <td>Assigns <strong>Creator</strong> and/or <strong>Streamer</strong> per the Profile Type.
+          No pending role for this type.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <ul>
+    <li>The form is a 3-step flow — dropdowns, then a modal for the text fields, then an optional
+      comments step. Contact email and URLs are format-checked on submit; a bad value shows a
+      <strong>Fix &amp; resubmit</strong> button that reopens the form pre-filled.</li>
+    <li><strong>One open application per type per member.</strong> After a rejection, the same type
+      can be resubmitted only after <strong>30 days</strong> (enforced by the bot).</li>
+    <li>The review channel is locked to <strong>Admin</strong> and <strong>MANAVA Team</strong>;
+      Moderator and Senior Moderator are explicitly excluded.</li>
+    <li>Application contact details are never written to general logs — they stay inside the review
+      channel and the applicant's own DMs.</li>
+  </ul>
+
+  <h4>Flow — submit and review</h4>
+  <ol class="flow">
+    <li>Member runs <code>/apply developer</code> (or <code>/apply creator-streamer</code>), fills the form.</li>
+    <li>The bot assigns <strong>Developer Pending</strong> (Developer only), posts a summary card to the review channel, and DMs the applicant a receipt.</li>
+    <li>A reviewer clicks a button on the card:
+      <ul>
+        <li><strong>Approve</strong> → assigns the role(s), removes Pending, DMs the applicant.</li>
+        <li><strong>Reject</strong> → optional reason, removes Pending, DMs the applicant, starts the 30-day clock.</li>
+        <li><strong>Request More Info</strong> → the reviewer types a question; the applicant is DMed a <strong>Respond</strong> button.</li>
+      </ul>
+    </li>
+    <li>If more info was requested, the applicant clicks <strong>Respond</strong>, types an answer; it is attached to the <em>same</em> application and the card returns to the reviewers.</li>
+    <li>The reviewer confirmation names the applicant with a mention. <span class="r">All buttons survive a bot restart.</span></li>
+  </ol>
+
+  <h3>4.2 &nbsp; Seasons</h3>
+  <ul>
+    <li>Staff-only. <code>/season start</code> opens a season; <code>/season end</code> freezes
+      Season XP; <code>/season status</code> shows the current one.</li>
+    <li><code>/season new</code> (with a confirm step) ends the current season and
+      <strong>resets every member's Personal Season XP and every squad's Season Squad XP to 0</strong>.
+      Lifetime XP and per-member contribution are never touched. The action and the staff member who
+      ran it are recorded.</li>
+  </ul>
+
+  <h3>4.3 &nbsp; Account linking / Verified Player</h3>
+  <p>
+    Linking a Discord account to a MANAVA account happens on the <strong>MANAVA website</strong> —
+    there is no bot command for it. The bot only <em>reads</em> the result.
+  </p>
+  <ul>
+    <li><strong>Gateway mode</strong> (once MANAVA supplies credentials): when a member tries to
+      create a squad, the bot asks the MANAVA Gateway whether that Discord id is linked and
+      email-verified, and shows the right guidance — "link your MANAVA account" vs "confirm your
+      email" — with a link to the MANAVA site.</li>
+    <li><strong>Stub mode</strong> (default until then): staff set the flag manually with
+      <code>/admin set-verified</code>, and map a MANAVA id with
+      <code>/admin link-manava-account</code>. These commands stay available as a support tool even
+      after Gateway mode is on.</li>
+  </ul>
+
+  <h4>Flow — a member becomes eligible</h4>
+  <ol class="flow">
+    <li>Member runs <code>/squad create</code> and is told they aren't a Verified Player, with a link to the MANAVA site.</li>
+    <li>Member signs in / registers on the MANAVA site with Discord and confirms their email.</li>
+    <li>Member runs <code>/squad create</code> again — the bot re-checks with the Gateway, sees they're linked and verified, and (assuming the other gates pass) creates the squad.</li>
+  </ol>
+
+  <h3>4.4 &nbsp; Reliability</h3>
+  <ul>
+    <li>Duplicate / retried MANAVA events never grant XP twice (checked before any XP is computed).</li>
+    <li>Bad or unsigned webhooks are rejected; a database blip returns a retryable response so the
+      Gateway re-delivers; a temporary Gateway outage falls back to the last known value.</li>
+    <li>All persistent buttons (squad join requests, application review, applicant "Respond") keep
+      working across a bot restart.</li>
+    <li>The bot never grants Admin, MANAVA Team, Senior Moderator or Moderator — a hard deny-list
+      blocks it even on a logic bug.</li>
+    <li>Squad creation rolls back its Discord objects if the database write fails — no half-made squads.</li>
+    <li>Every administrative change (XP corrections, verification, config edits, season actions,
+      application decisions, squad lifecycle) is written to an audit log with the actor, timestamp,
+      and before/after values.</li>
+    <li>If a member has DMs closed, <code>/squad apply</code> tells them to enable DMs before
+      continuing, and a reviewer is told when a decision DM couldn't be delivered.</li>
+  </ul>
+</div>
+
+<!-- ===================== COMMANDS ===================== -->
+<div class="section">
+  <h2><span class="num">5.</span>&nbsp; Command reference</h2>
+  <p class="lead">
+    Replies are private (only the person who ran the command sees them). "Staff" = the
+    <strong>Admin</strong> or <strong>MANAVA Team</strong> role. The <code>/admin</code>,
+    <code>/xpconfig</code> and <code>/season</code> groups are hidden from non-administrators in the
+    command menu. Name fields auto-complete as you type.
+  </p>
+
+  <h3>5.1 &nbsp; Squads — <code>/squad</code></h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>Who</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/squad create name:&lt;3–32&gt;</code></td><td><span class="who">Everyone</span></td><td>Create a squad (subject to the eligibility gates). Makes the role + 4 channels.</td></tr>
+      <tr><td><code>/squad apply squad_name:&lt;name&gt;</code></td><td><span class="who">Everyone</span></td><td>Request to join a squad; Leader/Officers get Approve/Reject buttons by DM.</td></tr>
+      <tr><td><code>/squad invite user:@member</code></td><td><span class="who">Leader · Officer</span></td><td>Add a member directly (one-squad and capacity checked).</td></tr>
+      <tr><td><code>/squad leave</code></td><td><span class="who">Any member</span></td><td>Leave your squad. A Leader must transfer or disband first.</td></tr>
+      <tr><td><code>/squad remove user:@member [reason]</code></td><td><span class="who">Leader · Officer</span></td><td>Remove a member. Confirm step. Can't remove the Leader.</td></tr>
+      <tr><td><code>/squad promote user:@member</code></td><td><span class="who">Leader</span></td><td>Member → Officer (max 2).</td></tr>
+      <tr><td><code>/squad demote user:@member</code></td><td><span class="who">Leader</span></td><td>Officer → Member. Confirm step.</td></tr>
+      <tr><td><code>/squad transfer-leadership user:@member</code></td><td><span class="who">Leader</span></td><td>Hand over leadership. Confirm step.</td></tr>
+      <tr><td><code>/squad disband [reason]</code></td><td><span class="who">Leader</span></td><td>Disband. Confirm step. Access revoked now; channels deleted after 30 days; record kept forever.</td></tr>
+      <tr><td><code>/squad info</code></td><td><span class="who">Any member</span></td><td>Show your squad's roster.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.2 &nbsp; Leaderboards — <code>/leaderboard</code></h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>Who</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/leaderboard squads</code></td><td><span class="who">Everyone</span></td><td>Global squad leaderboard by Season XP; top 32 badged.</td></tr>
+      <tr><td><code>/leaderboard squad [squad_name]</code></td><td><span class="who">Everyone</span></td><td>A squad's member leaderboard. Defaults to your own squad.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.3 &nbsp; Applications — <code>/apply</code></h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>Who</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/apply developer</code></td><td><span class="who">Everyone</span></td><td>Start a Developer application. Assigns <strong>Developer Pending</strong>, posts to the review channel.</td></tr>
+      <tr><td><code>/apply creator-streamer</code></td><td><span class="who">Everyone</span></td><td>Start a Creator / Streamer application.</td></tr>
+    </tbody>
+  </table>
+  <p class="lead">
+    Review is done with the <strong>Approve / Reject / Request More Info</strong> buttons on the
+    card in the review channel — <strong>Admin / MANAVA Team only</strong>. One open application per
+    type; 30-day wait after a rejection.
+  </p>
+
+  <h3>5.4 &nbsp; Seasons — <code>/season</code> &nbsp;<span class="who">Staff</span></h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/season status</code></td><td>Show the current / last season.</td></tr>
+      <tr><td><code>/season start</code></td><td>Open a new season (fails if one is already active).</td></tr>
+      <tr><td><code>/season end</code></td><td>End the active season; Season XP is frozen until the next starts.</td></tr>
+      <tr><td><code>/season new</code></td><td>Confirm step. End the current season and reset <strong>all</strong> Personal + Squad Season XP to 0. Lifetime XP untouched.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.5 &nbsp; XP configuration — <code>/xpconfig</code> &nbsp;<span class="who">Staff</span></h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/xpconfig view</code></td><td>Show current XP amounts, level thresholds, excluded channels, integration mode.</td></tr>
+      <tr><td><code>/xpconfig set-xp key:&lt;…&gt; value:&lt;n&gt;</code></td><td>Change an XP amount (match / participation / placement 1–3 / prize-slot bonus).</td></tr>
+      <tr><td><code>/xpconfig set-threshold level:&lt;2–7&gt; value:&lt;n&gt;</code></td><td>Change the Lifetime Squad XP needed for a level.</td></tr>
+      <tr><td><code>/xpconfig exclude-channel channel:&lt;#ch&gt; excluded:&lt;true|false&gt;</code></td><td>Add / remove a channel or category from text-XP.</td></tr>
+      <tr><td><code>/xpconfig simulate-manava-event …</code></td><td>Test harness: push a synthetic MANAVA event through the real pipeline.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.6 &nbsp; Admin — <code>/admin</code> &nbsp;<span class="who">Staff</span></h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/admin status</code></td><td>Read-only summary of the bot's configuration and live counts (integration mode, webhook auth, migrations, XP rule, application routing, active/archived squads, memberships, applications by status, current season).</td></tr>
+      <tr><td><code>/admin set-verified user:@member verified:&lt;bool&gt;</code></td><td>Manually set Verified Player status (support fallback).</td></tr>
+      <tr><td><code>/admin add-xp user:@member amount:&lt;n&gt; [reason]</code></td><td>Manually grant Personal XP (also cascades to the member's squad). Recorded with the reason.</td></tr>
+      <tr><td><code>/admin link-manava-account user:@member manava_user_id:&lt;id&gt;</code></td><td>Manually map a Discord member to a MANAVA id (support fallback).</td></tr>
+      <tr><td><code>/admin restore-squad squad_name:&lt;name&gt;</code></td><td>Recover a squad disbanded in the last 30 days — recreates the role, re-activates it, re-adds members, restores access.</td></tr>
+      <tr><td><code>/admin set-application-channel application_type:&lt;…&gt; [channel]</code></td><td>Route a given application type to a specific channel (locked to staff). Blank = back to <code>#applications-review</code>.</td></tr>
+      <tr><td><code>/admin gateway refresh-identity user:@member</code></td><td>Gateway mode only — re-fetch a member's MANAVA linked/verified status.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.7 &nbsp; Utility</h3>
+  <table class="data">
+    <thead><tr><th>Command</th><th>Who</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>/help</code></td><td><span class="who">Everyone</span></td><td>Command list, tailored — members see the member commands; staff also see the admin sections.</td></tr>
+      <tr><td><code>!sync</code> <span class="lead">(typed message, not a slash command)</span></td><td><span class="who">Staff</span></td><td>Re-register slash commands, re-check roles/categories/permissions, re-create the application roles + channel, refresh caches — without a restart. Run after any server-object change.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===================== CONFIG ===================== -->
+<div class="section">
+  <h2><span class="num">6.</span>&nbsp; Configuration &amp; tunable values</h2>
+
+  <h3>6.1 &nbsp; Changed live from Discord (no redeploy)</h3>
+  <table class="data avoid-break">
+    <thead><tr><th>What</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>XP per event type (match, participation, placement 1–3, prize-slot bonus)</td><td><code>/xpconfig set-xp</code></td></tr>
+      <tr><td>Lifetime Squad XP needed for levels 2–7</td><td><code>/xpconfig set-threshold</code></td></tr>
+      <tr><td>Channels / categories excluded from text-XP</td><td><code>/xpconfig exclude-channel</code></td></tr>
+      <tr><td>Review channel per application type</td><td><code>/admin set-application-channel</code></td></tr>
+      <tr><td>Verified-Player flag / MANAVA id mapping (support)</td><td><code>/admin set-verified</code>, <code>/admin link-manava-account</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 &nbsp; Fixed rules (by specification)</h3>
+  <table class="data avoid-break">
+    <thead><tr><th>Rule</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td>Squad-creation Lifetime XP gate</td><td>1,500</td></tr>
+      <tr><td>Discord text XP</td><td>+15 per message · min 10 characters · 60-second cooldown</td></tr>
+      <tr><td>Officers per squad</td><td>max 2</td></tr>
+      <tr><td>Squads per category / total</td><td>10 per category · 70 total (7 categories)</td></tr>
+      <tr><td>Member caps by level</td><td>20 / 50 / 100 / 200 / 300 / 500 / 1,000</td></tr>
+      <tr><td>Disband archive window</td><td>30 days (env <code>SQUAD_ARCHIVE_DAYS</code>)</td></tr>
+      <tr><td>Reapplication cooldown after a reject</td><td>30 days</td></tr>
+      <tr><td>Global leaderboard highlight</td><td>top 32</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.3 &nbsp; Environment variables (set at deploy)</h3>
+  <table class="data avoid-break">
+    <thead><tr><th>Variable</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>DISCORD_BOT_TOKEN</code>, <code>DISCORD_GUILD_ID</code></td><td>Bot token and server id. Needs the Server Members + Message Content intents.</td></tr>
+      <tr><td><code>DATABASE_URL</code></td><td>Supabase Postgres (session pooler) connection string.</td></tr>
+      <tr><td><code>MANAVA_GATEWAY_BASE_URL</code>, <code>DISCORD_BACKEND_API_KEY</code></td><td>Set both to turn on Gateway mode (real identity lookups).</td></tr>
+      <tr><td><code>WEBHOOK_SIGNING_SECRET</code></td><td>Verifies the signature on inbound MANAVA event webhooks.</td></tr>
+      <tr><td><code>MANAVA_LINK_URL</code></td><td>The MANAVA site members are sent to for account linking.</td></tr>
+      <tr><td><code>PORT</code>, <code>LOG_LEVEL</code>, <code>SQUAD_ARCHIVE_DAYS</code></td><td>Webhook/health port; log level; archive window. Have sensible defaults.</td></tr>
+    </tbody>
+  </table>
+  <p class="lead">Full descriptions are in <code>docs/deployment.md</code>. Secrets are read only from the environment — never committed.</p>
+</div>
+
+<!-- ===================== PREREQS ===================== -->
+<div class="section">
+  <h2><span class="num">7.</span>&nbsp; Server prerequisites &amp; operating notes</h2>
+
+  <h3>7.1 &nbsp; Must already exist on the server</h3>
+  <ul>
+    <li><strong>Roles</strong> (matched by name): <code>Admin</code>, <code>MANAVA Team</code>,
+      <code>Senior Moderator</code>, <code>Moderator</code>, <code>Squad Leader</code>,
+      <code>Squad Officer</code>, <code>Squad Member</code>, <code>Member</code>.</li>
+    <li><strong>Categories</strong> (created by staff, exact names): <code>⚔️〔SQUADS 01〕</code>
+      through <code>⚔️〔SQUADS 07〕</code>.</li>
+    <li>The bot's own role must sit <strong>above</strong> the squad and application roles it assigns.</li>
+  </ul>
+
+  <h3>7.2 &nbsp; Created automatically by the bot</h3>
+  <ul>
+    <li>Roles <code>Developer Pending</code>, <code>Developer</code>, <code>Creator</code>,
+      <code>Streamer</code>, and the <code>#applications-review</code> channel (locked to Admin +
+      MANAVA Team; Moderator / Senior Moderator denied). Created on startup or <code>!sync</code> if
+      missing.</li>
+    <li>Per-squad roles and channels, on each squad creation.</li>
+  </ul>
+
+  <h3>7.3 &nbsp; Day-to-day</h3>
+  <table class="data avoid-break">
+    <thead><tr><th>Need</th><th>Do</th></tr></thead>
+    <tbody>
+      <tr><td>See configuration and live status</td><td><code>/admin status</code></td></tr>
+      <tr><td>After changing roles / channels / categories</td><td><code>!sync</code></td></tr>
+      <tr><td>Recover a squad disbanded by mistake (within 30 days)</td><td><code>/admin restore-squad</code></td></tr>
+      <tr><td>Send an application type to its own channel</td><td><code>/admin set-application-channel</code></td></tr>
+      <tr><td>Discord ↔ database out of sync (deleted channel/role, etc.)</td><td>see <code>docs/recovery.md</code></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <h4>Command visibility</h4>
+    The <code>/admin</code>, <code>/xpconfig</code> and <code>/season</code> groups are set to
+    require the Discord <strong>Administrator</strong> permission, so members without it don't see
+    them in the command menu. If the <strong>MANAVA Team</strong> role should use them without being
+    full Administrators, a server admin allows the role once under
+    <strong>Server&nbsp;Settings → Integrations → MANAVA&nbsp;Setup&nbsp;Bot → Command&nbsp;Permissions</strong>.
+  </div>
+</div>
+
+<!-- ===================== GATEWAY ===================== -->
+<div class="section">
+  <h2><span class="num">8.</span>&nbsp; MANAVA Gateway integration</h2>
+  <p>The bot and the MANAVA Gateway have exactly two contact points.</p>
+
+  <h3>8.1 &nbsp; Bot → Gateway: "is this Discord account a verified player?"</h3>
+  <p>
+    When a member hits the squad-creation gate, the bot asks the Gateway about their Discord id and
+    gets back whether the account is linked to a MANAVA account, the MANAVA player id, and whether
+    the email is confirmed. The bot caches this so later gameplay events can be attributed to the
+    right member.
+  </p>
+
+  <h3>8.2 &nbsp; Gateway → Bot: gameplay events</h3>
+  <p>
+    The Gateway sends one signed webhook per event (match completed, tournament registered,
+    tournament placement) to a URL <strong>MANAVA registers on their side</strong>. The bot verifies
+    the signature, de-duplicates by event id, and grants the configured XP. If the bot can't be
+    reached or replies with an error, the Gateway retries on its own schedule.
+  </p>
+
+  <div class="callout">
+    <h4>Two modes</h4>
+    <strong>Gateway mode</strong> is active once <code>MANAVA_GATEWAY_BASE_URL</code>,
+    <code>DISCORD_BACKEND_API_KEY</code> and <code>WEBHOOK_SIGNING_SECRET</code> are set.
+    Until then the bot is in <strong>stub mode</strong>: <code>/admin set-verified</code> and
+    <code>/admin link-manava-account</code> stand in for the identity lookup, and the event
+    pipeline is exercised with <code>/xpconfig simulate-manava-event</code>. Switching modes is an
+    environment-variable change and a restart — no code change.
+  </div>
+  <p class="lead">Full request/response detail is in <code>docs/manava-gateway-integration.md</code>.</p>
+</div>
+
+<!-- ===================== LIMITATIONS ===================== -->
+<div class="section">
+  <h2><span class="num">9.</span>&nbsp; Known limitations &amp; items owned by MANAVA</h2>
+
+  <h3>9.1 &nbsp; By design</h3>
+  <ul>
+    <li>The 60-second text-XP cooldown is kept in memory, so it resets on a bot restart (at most one
+      extra grant right after a redeploy).</li>
+    <li>Text-XP grants are best-effort during a database outage — they're logged and skipped, not queued.</li>
+    <li>A season reset is recorded but final standings aren't snapshotted — export the leaderboard
+      before <code>/season new</code> if a record is wanted.</li>
+    <li>A member's "contribution" figure is per-membership-stint lifetime, not per-season.</li>
+    <li>Disbanded squads keep hidden channels for 30 days before deletion; recover with
+      <code>/admin restore-squad</code> within that window.</li>
+    <li>Run only one instance of the bot per token.</li>
+    <li>A gameplay event for a MANAVA player the bot has never looked up is recorded but grants no
+      XP until an identity lookup warms the cache (confirmed acceptable for launch).</li>
+  </ul>
+
+  <h3>9.2 &nbsp; Provided / done by MANAVA</h3>
+  <ul>
+    <li>Real <code>DISCORD_BACKEND_API_KEY</code> and <code>WEBHOOK_SIGNING_SECRET</code> values.</li>
+    <li>Registering this deployment's event webhook URL with the Gateway.</li>
+    <li>A value for the prize-slot XP bonus (currently 0, so it has no effect).</li>
+    <li>The production MANAVA account-linking URL.</li>
+    <li>Deployment and CI/CD (GitLab → VPS). The repository provides the container, a runtime
+      contract (<code>docs/deployment.md</code>) and the database migrations.</li>
+  </ul>
+
+  <div class="footer-note">
+    MANAVA Multiverse Discord Bot — Implementation &amp; Command Guide — build <code>718a6d3</code> —
+    7 September 2026. Technical detail in the repository's <code>docs/</code> folder.
+  </div>
+</div>
+
+</body>
+</html>

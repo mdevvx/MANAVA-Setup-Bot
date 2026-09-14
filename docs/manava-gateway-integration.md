@@ -84,11 +84,20 @@ Three event types (camelCase payloads):
 |---|---|---|
 | `match_completed` | `matchId` | `skill_match_xp` |
 | `tournament_registered` | `tournamentId` | `tournament_participation_xp` |
-| `tournament_placement` | `tournamentId`, `place` (int, 1-based), `wonPrizeSlot` (bool) | `tournament_participation_xp` + placement bonus (`placement_reward_1/2/3` for `place` 1/2/3) + `prize_slot_bonus_xp` if `wonPrizeSlot` |
+| `tournament_placement` | `tournamentId`, `place` (int, 1-based), `wonPrizeSlot` (bool) | placement bonus (`placement_reward_1/2/3` for `place` 1/2/3) + `prize_slot_bonus_xp` if `wonPrizeSlot` |
 
 `game` is one of `cs2` / `swag` / `billiard` (the bot stores whatever it's
 sent, no gate). `prize_slot_bonus_xp` is seeded to **0** (migration `0007`), so
 `wonPrizeSlot` changes nothing until an admin sets it via `/xpconfig set-xp`.
+
+**`tournament_placement` does not re-grant `tournament_participation_xp`.**
+Participation is granted exactly once, by `tournament_registered`, on the
+assumption that a player can't have a placement in a tournament they never
+registered for. `tournament_placement` only ever adds the placement bonus (and
+prize-slot bonus on top) — fixed 2026-09-15 after a client report that a
+placing player was getting participation XP twice (once from each event, same
+`tournamentId`, different `eventId`s, so the `event_id` dedup didn't catch
+it). See `tests/test_xp_computation.py`.
 
 `manava_event_service.parse_event` accepts the camelCase Gateway keys *and* the
 pre-Gateway snake_case keys, normalising the old event-type names

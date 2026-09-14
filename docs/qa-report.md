@@ -1,12 +1,10 @@
 # QA report
 
-> **Presented version:** `MANAVA-Bot-QA-Handover.pdf` (in this folder) is the
-> formatted handover document for the client — same substance as this file,
-> plus an executable live-server checklist with a result column and a sign-off
-> page. Regenerate it from `MANAVA-Bot-QA-Handover.html` with
-> `chrome --headless --no-pdf-header-footer --print-to-pdf=... file:///…html`.
+> This is the internal QA record. The client-facing handover document is
+> `MANAVA-Bot-Guide.pdf` (per-milestone implementation, command reference,
+> feature flows) — it does not carry test detail.
 
-`pytest` — **89 passing**, `mypy src` clean (`pytest.ini` sets
+`pytest` — **97 passing**, `mypy src` clean (`pytest.ini` sets
 `asyncio_mode = auto`). Unit-level: service logic, permission-overwrite
 construction, event parsing/dedup, HMAC signature verification, cross-squad
 isolation, disband cleanup + recovery, application flows / cooldown /
@@ -52,6 +50,7 @@ autocompletes are read-only / UI-only and verified by loading the command tree.
 | Leave-then-join-another-squad XP | `test_squad_xp_contribution.py` (contribution stays with the squad; new stint starts at 0) |
 | Wave 1500 gate | `check_eligibility` lifetime-XP gate — **manual** live |
 | `wonPrizeSlot` / prize-slot bonus | `test_manava_event_parsing.py` parses it; `_compute_xp` adds `prize_slot_bonus_xp` (default 0) |
+| **`tournament_placement` doesn't double-grant participation XP** | `test_xp_computation.py` — regression for a client-reported bug (2026-09-15): placement now grants only the placement + prize-slot bonus, never `tournament_participation_xp` again (that's granted once, by `tournament_registered`) |
 
 ### Seasons
 
@@ -59,6 +58,7 @@ autocompletes are read-only / UI-only and verified by loading the command tree.
 |---|---|
 | Start / End / Reset behaviour | `test_season_reset.py` (start-new resets both counters; no-active-season path; end-with-none raises) |
 | **Lifetime XP persists across a season reset** | `test_season_reset.py` — reset touches only `season_xp`; audit payload asserts no "lifetime" values move |
+| **Season XP frozen between End Season and the next Start** | `test_xp_season_gating.py` — regression for a client-reported bug (2026-09-14): `xp_service.grant_personal_xp` now checks `seasons_repo.get_active` and only moves `season_xp` (Personal + Squad) while a season is active; `lifetime_xp` and per-membership `contributed_xp` always move. Covers Discord text XP, MANAVA events, and `/admin add-xp` (now routed through the same choke point, which also fixed a second bug where `/admin add-xp` bypassed the squad-XP cascade) |
 | Actor recorded | `test_season_reset.py` |
 
 ### Applications

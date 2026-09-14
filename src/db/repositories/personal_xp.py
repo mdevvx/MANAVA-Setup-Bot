@@ -56,22 +56,40 @@ async def get_lifetime_xp(conn: asyncpg.Connection, discord_user_id: int) -> int
     return int(row["lifetime_xp"]) if row else 0
 
 
-async def add_xp(conn: asyncpg.Connection, discord_user_id: int, amount: int) -> PersonalXp:
+async def add_xp(
+    conn: asyncpg.Connection, discord_user_id: int, amount: int, *, season_active: bool
+) -> PersonalXp:
     """The real Unified Personal XP accumulator: every XP gain increments
-    lifetime_xp and season_xp together, from either source (Discord activity
-    or MANAVA events) — there is exactly one counter pair, never two
-    unsynchronized ones."""
+    lifetime_xp, from either source (Discord activity or MANAVA events) —
+    there is exactly one counter pair, never two unsynchronized ones.
+
+    season_xp only moves while a season is active. Between End Season and the
+    next Start (New) Season, lifetime_xp keeps accruing but season_xp is
+    frozen — it must read exactly what it read when the season ended, not
+    silently keep climbing."""
     await ensure_row(conn, discord_user_id)
-    row = await conn.fetchrow(
-        """
-        update personal_xp
-        set lifetime_xp = lifetime_xp + $2, season_xp = season_xp + $2, updated_at = now()
-        where discord_user_id = $1
-        returning *
-        """,
-        discord_user_id,
-        amount,
-    )
+    if season_active:
+        row = await conn.fetchrow(
+            """
+            update personal_xp
+            set lifetime_xp = lifetime_xp + $2, season_xp = season_xp + $2, updated_at = now()
+            where discord_user_id = $1
+            returning *
+            """,
+            discord_user_id,
+            amount,
+        )
+    else:
+        row = await conn.fetchrow(
+            """
+            update personal_xp
+            set lifetime_xp = lifetime_xp + $2, updated_at = now()
+            where discord_user_id = $1
+            returning *
+            """,
+            discord_user_id,
+            amount,
+        )
     assert row is not None
     return _row_to_personal_xp(row)
 

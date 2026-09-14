@@ -111,7 +111,14 @@ async def _compute_xp(conn: asyncpg.Connection, event: ManavaEvent) -> int:
         return config.get(constants.XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION, 0)
 
     if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_PLACEMENT:
-        base = config.get(constants.XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION, 0)
+        # Deliberately does NOT add XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION here.
+        # A placement always implies the player registered for that same
+        # tournament, so tournament_registered already grants the
+        # participation XP once; re-adding it on tournament_placement would
+        # double-grant participation for every player who places (client-
+        # reported, fixed 2026-09-15). Placement events grant only the
+        # placement bonus + prize-slot bonus, on top of whatever
+        # tournament_registered already gave the player.
         placement_bonus_key = {
             1: constants.XP_CONFIG_KEY_PLACEMENT_1ST,
             2: constants.XP_CONFIG_KEY_PLACEMENT_2ND,
@@ -123,7 +130,7 @@ async def _compute_xp(conn: asyncpg.Connection, event: ManavaEvent) -> int:
         prize_slot_bonus = (
             config.get(constants.XP_CONFIG_KEY_PRIZE_SLOT_BONUS, 0) if event.won_prize_slot else 0
         )
-        return base + placement_bonus + prize_slot_bonus
+        return placement_bonus + prize_slot_bonus
 
     return 0
 

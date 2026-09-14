@@ -17,7 +17,7 @@ from src.discord_state.role_resolver import resolve_guild_state
 from src.discord_state.staff_check import is_elevated_staff, require_elevated_staff
 from src.errors import BotUserError, DiscordSetupError
 from src.models.application import AppType
-from src.services import account_linking, season_service, squad_lifecycle
+from src.services import account_linking, season_service, squad_lifecycle, xp_service
 
 if TYPE_CHECKING:
     from src.bot import ManavaBot
@@ -178,7 +178,11 @@ class AdminCog(commands.Cog):
         await interaction.response.defer(ephemeral=True, thinking=True)
         async with self.bot.db_pool.acquire() as conn:
             before = await xp_repo.get_lifetime_xp(conn, user.id)
-            personal = await xp_repo.add_xp(conn, user.id, amount)
+            # Routed through xp_service (not the bare repo call) so a manual
+            # correction behaves exactly like any other XP grant: it cascades
+            # to the user's current squad, and it respects the same
+            # season-active gating on season_xp as Discord/MANAVA grants.
+            personal = await xp_service.grant_personal_xp(conn, user.id, amount)
             await audit_repo.record(
                 conn,
                 actor_id=interaction.user.id,
@@ -186,7 +190,7 @@ class AdminCog(commands.Cog):
                 target_type="user",
                 target_id=str(user.id),
                 old_value={"lifetime_xp": before},
-                new_value={"lifetime_xp": personal.lifetime_xp, "amount": amount},
+                new_value={"lifetime_xp": personal.lifetime_xp, "season_xp": personal.season_xp, "amount": amount},
                 reason=reason,
             )
         await interaction.followup.send(
