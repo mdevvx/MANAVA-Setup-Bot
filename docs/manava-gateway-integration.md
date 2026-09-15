@@ -78,32 +78,53 @@ against the **raw** body bytes *before* JSON parsing, with `hmac.compare_digest`
 (`test_gateway_signature.py::test_matches_gateway_signpayload_wire_format`
 locks in wire compatibility). Bad/missing signature → `401`.
 
-Three event types (camelCase payloads):
+Four event types (camelCase payloads):
 
 | `eventType` | Fields (besides `eventId`, `eventType`, `manavaUserId`, `game`, `timestamp`) | XP granted |
 |---|---|---|
 | `match_completed` | `matchId` | `skill_match_xp` |
-| `tournament_registered` | `tournamentId` | `tournament_participation_xp` |
+| `tournament_registered` | `tournamentId` | none — sign-up alone is not paid |
+| `tournament_completed` ⚠️ **placeholder name, not live yet** | `tournamentId` | `tournament_participation_xp` |
 | `tournament_placement` | `tournamentId`, `place` (int, 1-based), `wonPrizeSlot` (bool) | placement bonus (`placement_reward_1/2/3` for `place` 1/2/3) + `prize_slot_bonus_xp` if `wonPrizeSlot` |
 
 `game` is one of `cs2` / `swag` / `billiard` (the bot stores whatever it's
 sent, no gate). `prize_slot_bonus_xp` is seeded to **0** (migration `0007`), so
 `wonPrizeSlot` changes nothing until an admin sets it via `/xpconfig set-xp`.
 
-**`tournament_placement` does not re-grant `tournament_participation_xp`.**
-Participation is granted exactly once, by `tournament_registered`, on the
-assumption that a player can't have a placement in a tournament they never
-registered for. `tournament_placement` only ever adds the placement bonus (and
-prize-slot bonus on top) — fixed 2026-09-15 after a client report that a
-placing player was getting participation XP twice (once from each event, same
-`tournamentId`, different `eventId`s, so the `event_id` dedup didn't catch
-it). See `tests/test_xp_computation.py`.
+### Participation XP moved off registration (client decision, 2026-09-16)
+
+Originally `tournament_registered` (sign-up) granted `tournament_participation_xp`
+directly. The client decided that rewards a player who never actually plays, so:
+
+- `tournament_registered` now grants **0 XP**. Still accepted (not rejected) —
+  the Gateway will likely keep sending it, the bot just doesn't pay for it.
+- A **new** event, `tournament_completed`, is what now grants
+  `tournament_participation_xp`. **The wire name `tournament_completed` is a
+  placeholder** — the client is coordinating the actual event name/shape with
+  the MANAVA backend team. The bot already accepts it (`constants.ALL_MANAVA_EVENT_TYPES`,
+  `constants.MANAVA_EVENT_TOURNAMENT_COMPLETED`) and computes XP for it
+  (`manava_event_service._compute_xp`) so it's ready to consume it the moment
+  MANAVA starts sending it — **once the real name is confirmed, update that one
+  constant** (and the `tournament_participated` alias below if the confirmed
+  name differs from both).
+- `tournament_placement` is unaffected by this change and still does **not**
+  re-grant `tournament_participation_xp` — participation is granted exactly
+  once, by `tournament_completed`, on the assumption a player can't have a
+  placement in a tournament they didn't complete. `tournament_placement` only
+  ever adds the placement bonus (+ prize-slot bonus) on top — fixed 2026-09-15
+  after a client report that a placing player was getting participation XP
+  twice (once from each event, same `tournamentId`, different `eventId`s, so
+  the `event_id` dedup didn't catch it).
+
+See `tests/test_xp_computation.py` for both fixes.
 
 `manava_event_service.parse_event` accepts the camelCase Gateway keys *and* the
 pre-Gateway snake_case keys, normalising the old event-type names
 (`skill_match_completed` → `match_completed`, `tournament_participated` →
-`tournament_registered`) via `constants.MANAVA_EVENT_TYPE_ALIASES`, so the
-`/xpconfig simulate-manava-event` harness still works.
+`tournament_completed` — the "participated" alias now points at actual
+participation, not sign-up) via `constants.MANAVA_EVENT_TYPE_ALIASES`, so the
+`/xpconfig simulate-manava-event` harness already exercises the new event
+without waiting on MANAVA.
 
 ### Retry / dedup (matches the Gateway's outbox)
 
@@ -161,3 +182,7 @@ not linked to MANAVA, or any historical (pre-registration) events.
   (from Sergey).
 - MANAVA registers the prod `/webhooks/manava` URL once the VPS host is known.
 - End-to-end run against the demo Gateway.
+- **`tournament_completed`'s real event name/shape** — client is coordinating
+  this with the MANAVA backend team (item 2, 2026-09-16). The bot already
+  accepts and pays XP for it under the placeholder name; swap in
+  `constants.MANAVA_EVENT_TOURNAMENT_COMPLETED` once confirmed.

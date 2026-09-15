@@ -45,6 +45,24 @@ def test_parses_gateway_placement_payload_with_prize_slot() -> None:
     assert out.tournament_id == "trn-4501"
 
 
+def test_parses_tournament_completed_payload() -> None:
+    """The new "actual participation" event (client decision, 2026-09-16) —
+    wire name is a placeholder pending MANAVA's confirmed event, but must
+    parse and normalise like any other known event type."""
+    out = parse_event(
+        {
+            "eventId": "trn-complete:t4501:u65a1f8",
+            "eventType": "tournament_completed",
+            "manavaUserId": "65a1f8c9e4b0d2f3a1234567",
+            "game": "swag",
+            "timestamp": "2026-08-27T20:00:00.000Z",
+            "tournamentId": "trn-4501",
+        }
+    )
+    assert isinstance(out, ManavaEvent)
+    assert out.event_type == constants.MANAVA_EVENT_TOURNAMENT_COMPLETED
+
+
 def test_legacy_snake_case_and_renamed_types_still_accepted() -> None:
     out = parse_event(
         {

@@ -108,17 +108,25 @@ async def _compute_xp(conn: asyncpg.Connection, event: ManavaEvent) -> int:
         return config.get(constants.XP_CONFIG_KEY_SKILL_MATCH, 0)
 
     if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_REGISTERED:
+        # Client decision (item 2, 2026-09-16): sign-up alone grants nothing.
+        # The Gateway may still send this event (a player still registers);
+        # accept it, log it, just don't pay XP for it. Still accepted rather
+        # than rejected so a still-arriving registered event doesn't turn
+        # into a webhook error.
+        return 0
+
+    if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_COMPLETED:
+        # The actual-participation event (see the constant's docstring in
+        # constants.py for the placeholder-name caveat).
         return config.get(constants.XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION, 0)
 
     if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_PLACEMENT:
         # Deliberately does NOT add XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION here.
-        # A placement always implies the player registered for that same
-        # tournament, so tournament_registered already grants the
-        # participation XP once; re-adding it on tournament_placement would
-        # double-grant participation for every player who places (client-
-        # reported, fixed 2026-09-15). Placement events grant only the
-        # placement bonus + prize-slot bonus, on top of whatever
-        # tournament_registered already gave the player.
+        # Participation XP is granted once, by tournament_completed — adding
+        # it again here would double-grant participation for every player who
+        # places (client-reported, fixed 2026-09-15). Placement events grant
+        # only the placement bonus + prize-slot bonus, on top of whatever
+        # tournament_completed already gave the player.
         placement_bonus_key = {
             1: constants.XP_CONFIG_KEY_PLACEMENT_1ST,
             2: constants.XP_CONFIG_KEY_PLACEMENT_2ND,
