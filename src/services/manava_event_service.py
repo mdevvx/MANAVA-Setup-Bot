@@ -115,18 +115,19 @@ async def _compute_xp(conn: asyncpg.Connection, event: ManavaEvent) -> int:
         # into a webhook error.
         return 0
 
-    if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_COMPLETED:
-        # The actual-participation event (see the constant's docstring in
-        # constants.py for the placeholder-name caveat).
+    if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_PARTICIPATED:
+        # The actual-participation event: fires once per player, right before
+        # tournament_placement, only for players who played the tournament to
+        # the end (disqualified players never get it).
         return config.get(constants.XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION, 0)
 
     if event.event_type == constants.MANAVA_EVENT_TOURNAMENT_PLACEMENT:
         # Deliberately does NOT add XP_CONFIG_KEY_TOURNAMENT_PARTICIPATION here.
-        # Participation XP is granted once, by tournament_completed — adding
+        # Participation XP is granted once, by tournament_participated — adding
         # it again here would double-grant participation for every player who
         # places (client-reported, fixed 2026-09-15). Placement events grant
         # only the placement bonus + prize-slot bonus, on top of whatever
-        # tournament_completed already gave the player.
+        # tournament_participated already gave the player.
         placement_bonus_key = {
             1: constants.XP_CONFIG_KEY_PLACEMENT_1ST,
             2: constants.XP_CONFIG_KEY_PLACEMENT_2ND,

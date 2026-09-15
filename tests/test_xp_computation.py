@@ -5,8 +5,9 @@ Regression coverage for two client decisions:
   tournament_participation_xp base, double-counting participation for any
   player who both registered and placed in the same tournament.
 - 2026-09-16: participation XP moved off tournament_registered (sign-up)
-  onto a dedicated tournament_completed event ("actual participation"),
-  so a player who registers but never plays gets nothing."""
+  onto the dedicated tournament_participated event ("actually played the
+  tournament to the end"), so a player who registers but never plays gets
+  nothing."""
 
 from __future__ import annotations
 
@@ -61,19 +62,19 @@ async def test_tournament_registered_grants_no_xp(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
-async def test_tournament_completed_grants_participation_xp(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The new "actual participation" event is what now pays
+async def test_tournament_participated_grants_participation_xp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The "actual participation" event is what now pays
     tournament_participation_xp, not tournament_registered."""
     monkeypatch.setattr(manava_event_service.xp_config_repo, "get_all", AsyncMock(return_value=_CONFIG))
-    xp = await manava_event_service._compute_xp(None, _event(constants.MANAVA_EVENT_TOURNAMENT_COMPLETED))  # type: ignore[arg-type]
+    xp = await manava_event_service._compute_xp(None, _event(constants.MANAVA_EVENT_TOURNAMENT_PARTICIPATED))  # type: ignore[arg-type]
     assert xp == 100
 
 
 @pytest.mark.asyncio
 async def test_tournament_placement_does_not_repeat_participation_xp(monkeypatch: pytest.MonkeyPatch) -> None:
     """The fix: a placement event grants only the placement bonus (+ prize-slot
-    bonus), never the participation base again — tournament_completed already
-    covered that for the same tournament."""
+    bonus), never the participation base again — tournament_participated
+    already covered that for the same tournament."""
     monkeypatch.setattr(manava_event_service.xp_config_repo, "get_all", AsyncMock(return_value=_CONFIG))
     xp = await manava_event_service._compute_xp(  # type: ignore[arg-type]
         None, _event(constants.MANAVA_EVENT_TOURNAMENT_PLACEMENT, place=1)

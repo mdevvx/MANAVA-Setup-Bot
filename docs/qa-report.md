@@ -4,7 +4,7 @@
 > `MANAVA-Bot-Guide.pdf` (per-milestone implementation, command reference,
 > feature flows) — it does not carry test detail.
 
-`pytest` — **99 passing**, `mypy src` clean (`pytest.ini` sets
+`pytest` — **100 passing**, `mypy src` clean (`pytest.ini` sets
 `asyncio_mode = auto`). Unit-level: service logic, permission-overwrite
 construction, event parsing/dedup, HMAC signature verification, cross-squad
 isolation, disband cleanup + recovery, application flows / cooldown /
@@ -51,7 +51,7 @@ autocompletes are read-only / UI-only and verified by loading the command tree.
 | Wave 1500 gate | `check_eligibility` lifetime-XP gate — **manual** live |
 | `wonPrizeSlot` / prize-slot bonus | `test_manava_event_parsing.py` parses it; `_compute_xp` adds `prize_slot_bonus_xp` (default 0) |
 | **`tournament_placement` doesn't double-grant participation XP** | `test_xp_computation.py` — regression for a client-reported bug (2026-09-15): placement now grants only the placement + prize-slot bonus, never `tournament_participation_xp` again |
-| **Participation XP requires actual participation, not just sign-up** | `test_xp_computation.py` — client decision (2026-09-16): `tournament_registered` (sign-up) now grants 0 XP; `tournament_participation_xp` is granted by a new `tournament_completed` event (placeholder wire name pending MANAVA's confirmed event — see `manava-gateway-integration.md`) |
+| **Participation XP requires actual participation, not just sign-up** | `test_xp_computation.py` — client decision (2026-09-16): `tournament_registered` (sign-up) now grants 0 XP; `tournament_participation_xp` is granted by `tournament_participated`, confirmed live on MANAVA's side the same day and verified against their `backend-gateway` source — see `manava-gateway-integration.md` |
 
 ### Seasons
 

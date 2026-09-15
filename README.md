@@ -16,7 +16,7 @@ Custom Discord bot for the MANAVA Multiverse server:
 - **MANAVA Gateway integration** — identity lookup + HMAC-signed inbound event
   webhooks (`docs/manava-gateway-integration.md`).
 
-Python 3.11+ / discord.py 2.x / Supabase Postgres via `asyncpg`. **99 unit
+Python 3.11+ / discord.py 2.x / Supabase Postgres via `asyncpg`. **100 unit
 tests, `mypy src` clean.**
 
 ---
@@ -173,7 +173,7 @@ Dockerfile  .dockerignore  .gitlab-ci.yml  mypy.ini  pytest.ini
 ## Tests
 
 ```bash
-pytest              # 99 tests
+pytest              # 100 tests
 mypy src            # clean
 ```
 

@@ -104,32 +104,33 @@ ALL_XP_CONFIG_KEYS: tuple[str, ...] = (
 )
 
 # --- MANAVA event types ---
-# Canonical names = the MANAVA Gateway's `eventType` values (gateway-diagram-en.html).
-# The pre-Gateway names are kept as accepted aliases (MANAVA_EVENT_TYPE_ALIASES)
-# so old payloads and the existing simulate-event harness still parse.
+# Canonical names = the MANAVA Gateway's `eventType` values, verified directly
+# against their `backend-gateway` source (events.constants.ts EVENT_TYPES +
+# ingest-event.dto.ts), not just the diagram. The pre-Gateway names are kept
+# as accepted aliases (MANAVA_EVENT_TYPE_ALIASES) so old payloads and the
+# existing simulate-event harness still parse.
 MANAVA_EVENT_MATCH_COMPLETED = "match_completed"
 MANAVA_EVENT_TOURNAMENT_REGISTERED = "tournament_registered"
 # Client decision (item 2, 2026-09-16): participation XP moves off
-# tournament_registered (sign-up) onto a dedicated "actually participated /
-# completed" event, so a player who registers but never plays gets nothing.
-# "tournament_completed" is a PLACEHOLDER wire name — the client is
-# coordinating the real event name/shape with the MANAVA backend team. Once
-# confirmed, update this one constant (and MANAVA_EVENT_TYPE_ALIASES below if
-# the confirmed name differs from both this and "tournament_participated") —
-# nothing else needs to change. See docs/manava-gateway-integration.md.
-MANAVA_EVENT_TOURNAMENT_COMPLETED = "tournament_completed"
+# tournament_registered (sign-up) onto a dedicated "actually played the
+# tournament to the end" event, so a player who registers but never plays
+# gets nothing. Confirmed live 2026-09-16 — arrives once per player, right
+# before tournament_placement; disqualified players get tournament_registered
+# only and never receive this event or tournament_placement.
+MANAVA_EVENT_TOURNAMENT_PARTICIPATED = "tournament_participated"
 MANAVA_EVENT_TOURNAMENT_PLACEMENT = "tournament_placement"
 ALL_MANAVA_EVENT_TYPES: tuple[str, ...] = (
     MANAVA_EVENT_MATCH_COMPLETED,
     MANAVA_EVENT_TOURNAMENT_REGISTERED,
-    MANAVA_EVENT_TOURNAMENT_COMPLETED,
+    MANAVA_EVENT_TOURNAMENT_PARTICIPATED,
     MANAVA_EVENT_TOURNAMENT_PLACEMENT,
 )
 MANAVA_EVENT_TYPE_ALIASES: dict[str, str] = {
     "skill_match_completed": MANAVA_EVENT_MATCH_COMPLETED,
-    # "Participated" now means the new actual-participation event, not
-    # sign-up — accept both candidate names MANAVA might land on.
-    "tournament_participated": MANAVA_EVENT_TOURNAMENT_COMPLETED,
+    # "tournament_completed" was this codebase's placeholder name for
+    # MANAVA_EVENT_TOURNAMENT_PARTICIPATED before the real event went live —
+    # kept as an alias in case anything (test data, notes) still uses it.
+    "tournament_completed": MANAVA_EVENT_TOURNAMENT_PARTICIPATED,
 }
 
 # Games the Gateway sends events for (gateway-diagram-en.html). Not enforced on
