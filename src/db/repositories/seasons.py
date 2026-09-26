@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 import asyncpg
 
 from src import constants
 from src.errors import SeasonStateError
-from src.models.season import Season, SeasonStatus
+from src.models.season import Season, SeasonPhase, SeasonStatus
 
 
 def _row_to_season(row: asyncpg.Record) -> Season:
@@ -16,6 +18,11 @@ def _row_to_season(row: asyncpg.Record) -> Season:
         started_by=row["started_by"],
         ended_at=row["ended_at"],
         ended_by=row["ended_by"],
+        phase=SeasonPhase(row["phase"]),
+        locked_at=row["locked_at"],
+        locked_by=row["locked_by"],
+        published_at=row["published_at"],
+        published_by=row["published_by"],
     )
 
 
@@ -72,4 +79,59 @@ async def end_active(conn: asyncpg.Connection, *, actor_id: int) -> Season:
     )
     if row is None:
         raise SeasonStateError("There's no active season to end.")
+    return _row_to_season(row)
+
+
+async def lock(conn: asyncpg.Connection, season_id: UUID, *, actor_id: int) -> Season:
+    """Qualification -> Qualification Lock. The ranking snapshot itself is
+    written separately (season_qualifications repo) in the same transaction —
+    this just flips the season's own phase marker."""
+    row = await conn.fetchrow(
+        """
+        update season_state
+        set phase = 'qualification_lock', locked_at = now(), locked_by = $2
+        where id = $1 and phase = 'qualification'
+        returning *
+        """,
+        season_id,
+        actor_id,
+    )
+    if row is None:
+        raise SeasonStateError("This season isn't in Qualification, so it can't be locked.")
+    return _row_to_season(row)
+
+
+async def advance_to_playoffs(conn: asyncpg.Connection, season_id: UUID, *, actor_id: int) -> Season:
+    """Qualification Lock -> Top-32 Playoffs — the Confirm/Publish step."""
+    row = await conn.fetchrow(
+        """
+        update season_state
+        set phase = 'top32_playoffs', published_at = now(), published_by = $2
+        where id = $1 and phase = 'qualification_lock'
+        returning *
+        """,
+        season_id,
+        actor_id,
+    )
+    if row is None:
+        raise SeasonStateError("This season's qualification list isn't locked yet — run /season lock first.")
+    return _row_to_season(row)
+
+
+async def mark_complete(conn: asyncpg.Connection, season_id: UUID, *, actor_id: int) -> Season:
+    """Snapshots (season_history, written separately) + closes the season out
+    properly — distinct from end_active, which is /season end's unlock-only
+    early-cancellation path. Allowed from any non-terminal phase."""
+    row = await conn.fetchrow(
+        """
+        update season_state
+        set status = 'ended', phase = 'season_complete', ended_at = now(), ended_by = $2
+        where id = $1 and status = 'active'
+        returning *
+        """,
+        season_id,
+        actor_id,
+    )
+    if row is None:
+        raise SeasonStateError("That season isn't active, so there's nothing to complete.")
     return _row_to_season(row)

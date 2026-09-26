@@ -103,6 +103,13 @@ class SeasonStateError(BotUserError):
         super().__init__(message)
 
 
+class Top32EntryNotFoundError(BotUserError):
+    """withdraw/disqualify targeted a squad that isn't in the locked qualification list."""
+
+    def __init__(self, squad_name: str) -> None:
+        super().__init__(f"**{squad_name}** isn't in this season's locked qualification list.")
+
+
 # --- Phase 3: MANAVA Gateway ---
 
 

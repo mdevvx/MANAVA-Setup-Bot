@@ -3,6 +3,7 @@ touches Lifetime XP, always opens a fresh season, and records the actor."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -10,7 +11,7 @@ from uuid import uuid4
 import pytest
 
 from src.errors import SeasonStateError
-from src.models.season import Season, SeasonStatus
+from src.models.season import Season, SeasonPhase, SeasonStatus
 from src.services import season_service
 
 
@@ -95,12 +96,45 @@ async def test_start_new_season_with_no_active_season(monkeypatch: pytest.Monkey
 @pytest.mark.asyncio
 async def test_end_season_with_none_active_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = _FakeConn()
-    monkeypatch.setattr(
-        season_service.seasons_repo,
-        "end_active",
-        AsyncMock(side_effect=SeasonStateError("There's no active season to end.")),
-    )
+    monkeypatch.setattr(season_service.seasons_repo, "get_active", AsyncMock(return_value=None))
+    end_mock = AsyncMock()
+    monkeypatch.setattr(season_service.seasons_repo, "end_active", end_mock)
     monkeypatch.setattr(season_service.audit_repo, "record", AsyncMock())
 
     with pytest.raises(SeasonStateError):
         await season_service.end_season(conn, actor_id=1)  # type: ignore[arg-type]
+    end_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_end_season_blocked_past_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Client decision (2026-09-23): once a season is locked/published,
+    /season end must be blocked — staff should use /season complete so the
+    history snapshot is never skipped."""
+    conn = _FakeConn()
+    locked_season = _season(5, SeasonStatus.ACTIVE)
+    locked_season = replace(locked_season, phase=SeasonPhase.QUALIFICATION_LOCK)
+    monkeypatch.setattr(season_service.seasons_repo, "get_active", AsyncMock(return_value=locked_season))
+    end_mock = AsyncMock()
+    monkeypatch.setattr(season_service.seasons_repo, "end_active", end_mock)
+    monkeypatch.setattr(season_service.audit_repo, "record", AsyncMock())
+
+    with pytest.raises(SeasonStateError):
+        await season_service.end_season(conn, actor_id=1)  # type: ignore[arg-type]
+    end_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_start_new_season_blocked_past_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same guard applies to /season new's internal end — it must not be able
+    to silently close out a locked/published season either."""
+    conn = _FakeConn()
+    locked_season = replace(_season(5, SeasonStatus.ACTIVE), phase=SeasonPhase.TOP32_PLAYOFFS)
+    monkeypatch.setattr(season_service.seasons_repo, "get_active", AsyncMock(return_value=locked_season))
+    end_mock = AsyncMock()
+    monkeypatch.setattr(season_service.seasons_repo, "end_active", end_mock)
+    monkeypatch.setattr(season_service.audit_repo, "record", AsyncMock())
+
+    with pytest.raises(SeasonStateError):
+        await season_service.start_new_season(conn, actor_id=1)  # type: ignore[arg-type]
+    end_mock.assert_not_awaited()
