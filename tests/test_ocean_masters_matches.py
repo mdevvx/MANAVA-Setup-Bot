@@ -9,8 +9,10 @@ from uuid import uuid4
 
 import pytest
 
+from datetime import datetime, timezone
+
 from src.errors import OceanMastersStateError
-from src.models.ocean_masters import MatchStatus, OceanMastersMatch, OceanMastersMode
+from src.models.ocean_masters import MatchStatus, OceanMastersMatch, OceanMastersMode, OceanMastersStatus
 from src.services import ocean_masters_service
 
 
@@ -256,3 +258,128 @@ async def test_bye_advances_automatically_with_no_staff_action(monkeypatch: pyte
     _, kwargs = decide_mock.await_args
     assert kwargs["winner_squad_id"] == real_squad
     assert kwargs["decided_by"] == ocean_masters_service._SYSTEM_ACTOR_ID
+
+
+def _tournament(*, status: OceanMastersStatus = OceanMastersStatus.LAUNCHED) -> object:
+    from src.models.ocean_masters import OceanMasters
+
+    return OceanMasters(
+        id=uuid4(),
+        season_id=uuid4(),
+        mode=OceanMastersMode.SINGLE_GAME,
+        games=("cs2",),
+        min_squads_required=None,
+        status=status,
+        launched_at=None,
+        launched_by=None,
+        completed_at=None,
+        winner_squad_id=None,
+        created_by=1,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+async def test_correct_result_rejects_pending_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _FakeConn()
+    tid = uuid4()
+    a, b = uuid4(), uuid4()
+    match = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_match", AsyncMock(return_value=match))
+
+    with pytest.raises(OceanMastersStateError):
+        await ocean_masters_service.correct_result(
+            conn, match.id, winner_squad_id=a, actor_id=9, reason="oops", channels=None  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.asyncio
+async def test_correct_result_blocked_once_next_round_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _FakeConn()
+    tid = uuid4()
+    a, b = uuid4(), uuid4()
+    decided = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=a, status=MatchStatus.COMPLETED)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_match", AsyncMock(return_value=decided))
+    monkeypatch.setattr(
+        ocean_masters_service.ocean_masters_repo, "get_by_id", AsyncMock(return_value=_tournament())
+    )
+    # Round 2 already exists — built off this match's (now-wrong) winner.
+    monkeypatch.setattr(
+        ocean_masters_service.ocean_masters_repo,
+        "get_round_matches",
+        AsyncMock(return_value=[_match(tournament_id=tid, squad_a_id=a, squad_b_id=uuid4())]),
+    )
+    correct_mock = AsyncMock()
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "correct_match", correct_mock)
+
+    with pytest.raises(OceanMastersStateError):
+        await ocean_masters_service.correct_result(
+            conn, decided.id, winner_squad_id=b, actor_id=9, reason="wrong side recorded", channels=None  # type: ignore[arg-type]
+        )
+    correct_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_correct_result_blocked_once_tournament_completed(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _FakeConn()
+    tid = uuid4()
+    a, b = uuid4(), uuid4()
+    decided = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=a, status=MatchStatus.COMPLETED)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_match", AsyncMock(return_value=decided))
+    monkeypatch.setattr(
+        ocean_masters_service.ocean_masters_repo,
+        "get_by_id",
+        AsyncMock(return_value=_tournament(status=OceanMastersStatus.COMPLETED)),
+    )
+    correct_mock = AsyncMock()
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "correct_match", correct_mock)
+
+    with pytest.raises(OceanMastersStateError):
+        await ocean_masters_service.correct_result(
+            conn, decided.id, winner_squad_id=b, actor_id=9, reason="wrong champion", channels=None  # type: ignore[arg-type]
+        )
+    correct_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_correct_result_allowed_before_round_advances(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _FakeConn()
+    tid = uuid4()
+    a, b = uuid4(), uuid4()
+    decided = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=a, status=MatchStatus.COMPLETED)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_match", AsyncMock(return_value=decided))
+    monkeypatch.setattr(
+        ocean_masters_service.ocean_masters_repo, "get_by_id", AsyncMock(return_value=_tournament())
+    )
+    corrected = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=b, status=MatchStatus.COMPLETED)
+    correct_mock = AsyncMock(return_value=corrected)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "correct_match", correct_mock)
+    audit_mock = AsyncMock()
+    monkeypatch.setattr(ocean_masters_service.audit_repo, "record", audit_mock)
+
+    # First call (the pre-check for "did the round already advance") returns
+    # empty — no round 2 yet. Second call (inside _try_advance_round, same
+    # round number) returns the sibling still pending, so nothing cascades.
+    sibling = _match(tournament_id=tid, seed_a=3, seed_b=4)
+    call_count = {"n": 0}
+
+    async def _get_round_matches(conn: object, tournament_id: object, round_number: int) -> list[OceanMastersMatch]:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return []  # round+1 check: doesn't exist yet
+        return [corrected, sibling]  # _try_advance_round's look at round 1 itself
+
+    monkeypatch.setattr(
+        ocean_masters_service.ocean_masters_repo, "get_round_matches", AsyncMock(side_effect=_get_round_matches)
+    )
+
+    result = await ocean_masters_service.correct_result(
+        conn, decided.id, winner_squad_id=b, actor_id=9, reason="scorekeeping error", channels=None  # type: ignore[arg-type]
+    )
+
+    assert result.match.winner_squad_id == b
+    correct_mock.assert_awaited_once()
+    _, kwargs = audit_mock.await_args
+    assert kwargs["action"] == "oceanmasters.match.correct_result"
+    assert kwargs["old_value"]["winner_squad_id"] == str(a)
+    assert kwargs["new_value"]["winner_squad_id"] == str(b)

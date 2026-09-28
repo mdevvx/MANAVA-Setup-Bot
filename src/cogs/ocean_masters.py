@@ -182,6 +182,37 @@ class OceanMastersCog(commands.Cog):
             )
         await interaction.followup.send(_decision_summary(result.match, result), ephemeral=True)
 
+    @match_group.command(
+        name="correct-result",
+        description="Fix an already-decided match (result correction / integration-failure override)",
+    )
+    @app_commands.describe(
+        match_id="Match ID (from /oceanmasters bracket)",
+        winner="The correct winning squad",
+        reason="Required — recorded in the audit log",
+    )
+    @app_commands.autocomplete(winner=_active_squad_autocomplete)
+    async def correct_result(
+        self, interaction: discord.Interaction, match_id: str, winner: str, reason: str
+    ) -> None:
+        await require_elevated_staff(self.bot, interaction)
+        if not reason.strip():
+            raise BotUserError("A reason is required to correct a result.")
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        async with self.bot.db_pool.acquire() as conn:
+            squad = await squads_repo.get_active_squad_by_name(conn, winner)
+            if squad is None:
+                raise BotUserError(f"No active squad named **{winner}** was found.")
+            result = await ocean_masters_service.correct_result(
+                conn,
+                _parse_match_id(match_id),
+                winner_squad_id=squad.id,
+                actor_id=interaction.user.id,
+                reason=reason,
+                channels=self.bot.ocean_masters_state,
+            )
+        await interaction.followup.send(_decision_summary(result.match, result), ephemeral=True)
+
     @match_group.command(name="set-discipline-result", description="Cross-game: record one game's result for a match")
     @app_commands.describe(match_id="Match ID (from /oceanmasters bracket)", game="Which game", winner="Winning squad")
     @app_commands.choices(game=_GAME_CHOICES)

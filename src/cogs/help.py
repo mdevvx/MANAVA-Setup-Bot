@@ -117,6 +117,8 @@ class HelpCog(commands.Cog):
                     "`/oceanmasters launch` — go live (manual; never auto-triggered by the threshold)\n"
                     "`/oceanmasters bracket` — view the current bracket\n"
                     "`/oceanmasters match set-result match_id:<...> winner:<...>` — staff-entered result\n"
+                    "`/oceanmasters match correct-result match_id:<...> winner:<...> reason:<...>` — fix an "
+                    "already-decided match (blocked once the next round exists)\n"
                     "`/oceanmasters match set-discipline-result match_id:<...> game:<...> winner:<...>` — "
                     "Cross-game, one discipline at a time\n"
                     "`/oceanmasters match override match_id:<...> outcome:<...> winner:<...> reason:<...>` — "

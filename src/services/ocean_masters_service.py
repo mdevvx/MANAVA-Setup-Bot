@@ -344,6 +344,59 @@ async def override_match(
     return MatchDecisionResult(match=decided, round_advanced=advanced, tournament_completed=completed)
 
 
+async def correct_result(
+    conn: asyncpg.Connection,
+    match_id: UUID,
+    *,
+    winner_squad_id: UUID,
+    actor_id: int,
+    reason: str,
+    channels: ResolvedOceanMastersState | None,
+) -> MatchDecisionResult:
+    """'Result correction' / 'integration-failure override' — the Technical
+    Scope lists these alongside technical loss/no-show/DQ/forfeit as part of
+    the same staff override suite. Fixes a match that was already decided.
+    Deliberately bounded: only safe while the next round hasn't been built
+    off it yet (or, for a final, before the tournament was marked complete)
+    — correcting past that point would leave a later round pointing at the
+    wrong squad, which this does not attempt to unwind."""
+    match = await ocean_masters_repo.get_match(conn, match_id)
+    if match.status is MatchStatus.PENDING:
+        raise OceanMastersStateError("This match hasn't been decided yet — use /oceanmasters match set-result.")
+    if winner_squad_id not in (match.squad_a_id, match.squad_b_id):
+        raise OceanMastersStateError("That squad isn't one of the two in this match.")
+
+    tournament = await ocean_masters_repo.get_by_id(conn, match.tournament_id)
+    if tournament.status.value == "completed":
+        raise OceanMastersStateError(
+            "This tournament is already complete and its champion has been announced — "
+            "correcting the final result isn't supported here. Contact support for a manual fix."
+        )
+    next_round_matches = await ocean_masters_repo.get_round_matches(conn, match.tournament_id, match.round + 1)
+    if next_round_matches:
+        raise OceanMastersStateError(
+            "The next round has already been generated from this match's result — correcting it now "
+            "would leave that round pointing at the wrong squad. Contact support for a manual fix."
+        )
+
+    async with conn.transaction():
+        decided = await ocean_masters_repo.correct_match(
+            conn, match_id, winner_squad_id=winner_squad_id, decided_by=actor_id, reason=reason
+        )
+        advanced, completed = await _try_advance_round(conn, match.tournament_id, match.round, channels=channels)
+        await audit_repo.record(
+            conn,
+            actor_id=actor_id,
+            action="oceanmasters.match.correct_result",
+            target_type="ocean_masters_match",
+            target_id=str(match_id),
+            old_value={"status": match.status.value, "winner_squad_id": str(match.winner_squad_id)},
+            new_value={"status": "completed", "winner_squad_id": str(winner_squad_id)},
+            reason=reason,
+        )
+    return MatchDecisionResult(match=decided, round_advanced=advanced, tournament_completed=completed)
+
+
 async def _resolve_byes_and_cascade(
     conn: asyncpg.Connection, tournament_id: UUID, round_number: int, *, channels: ResolvedOceanMastersState | None
 ) -> None:

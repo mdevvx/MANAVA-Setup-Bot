@@ -50,7 +50,63 @@ async def snapshot_all_active_squads(conn: asyncpg.Connection, season_id: UUID) 
         """,
         season_id,
     )
+    await _fill_ocean_masters_standings(conn, season_id)
     return len(rows)
+
+
+async def _fill_ocean_masters_standings(conn: asyncpg.Connection, season_id: UUID) -> None:
+    """Populates `ocean_masters_final_standing` for every squad that appears
+    in this season's Ocean Masters bracket, if one ran. A squad's furthest
+    round is exactly max(round) across the matches it appears in — it keeps
+    appearing in every later round until eliminated (or wins the final).
+    No-ops (leaves the column null) if no tournament exists for this season."""
+    await conn.execute(
+        """
+        with t as (
+            select id from ocean_masters where season_id = $1
+        ),
+        participants as (
+            select m.tournament_id, m.round, m.winner_squad_id, m.squad_a_id as squad_id
+            from ocean_masters_matches m join t on t.id = m.tournament_id
+            where m.squad_a_id is not null
+            union all
+            select m.tournament_id, m.round, m.winner_squad_id, m.squad_b_id as squad_id
+            from ocean_masters_matches m join t on t.id = m.tournament_id
+            where m.squad_b_id is not null
+        ),
+        furthest as (
+            select squad_id, max(round) as last_round
+            from participants
+            group by squad_id
+        ),
+        standings as (
+            select
+                p.squad_id,
+                case
+                    when p.winner_squad_id = p.squad_id
+                         and not exists (
+                             select 1 from ocean_masters_matches nm
+                             where nm.tournament_id = p.tournament_id and nm.round = p.round + 1
+                         )
+                        then 'Champion'
+                    when p.winner_squad_id is not null and p.winner_squad_id != p.squad_id
+                         and not exists (
+                             select 1 from ocean_masters_matches nm
+                             where nm.tournament_id = p.tournament_id and nm.round = p.round + 1
+                         )
+                        then 'Runner-up'
+                    else 'Eliminated — Round ' || p.round
+                end as standing
+            from participants p
+            join furthest f on f.squad_id = p.squad_id and f.last_round = p.round
+        )
+        update season_history sh
+        set ocean_masters_final_standing = st.standing
+        from standings st
+        where sh.season_id = $1 and sh.squad_id = st.squad_id
+        """,
+        season_id,
+    )
 
 
 async def get_for_season(conn: asyncpg.Connection, season_id: UUID) -> list[SeasonHistoryEntry]:

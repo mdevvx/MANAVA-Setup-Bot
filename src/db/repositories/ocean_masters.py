@@ -217,3 +217,31 @@ async def decide_match(
     if row is None:
         raise OceanMastersStateError("That match is already decided, or doesn't exist.")
     return await get_match(conn, match_id)
+
+
+async def correct_match(
+    conn: asyncpg.Connection,
+    match_id: UUID,
+    *,
+    winner_squad_id: UUID,
+    decided_by: int,
+    reason: str,
+) -> OceanMastersMatch:
+    """The 'result correction' / 'integration-failure override' path: fixes
+    an ALREADY-decided match. Deliberately the mirror image of decide_match's
+    WHERE clause — only ever touches a row that isn't still 'pending'."""
+    row = await conn.fetchrow(
+        """
+        update ocean_masters_matches
+        set winner_squad_id = $2, status = 'completed', decided_by = $3, decided_at = now(), decided_reason = $4
+        where id = $1 and status != 'pending'
+        returning id
+        """,
+        match_id,
+        winner_squad_id,
+        decided_by,
+        reason,
+    )
+    if row is None:
+        raise OceanMastersStateError("That match hasn't been decided yet — use set-result first.")
+    return await get_match(conn, match_id)
