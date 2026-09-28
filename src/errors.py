@@ -110,6 +110,23 @@ class Top32EntryNotFoundError(BotUserError):
         super().__init__(f"**{squad_name}** isn't in this season's locked qualification list.")
 
 
+# --- Release 3, Milestone 2: Ocean Masters ---
+
+
+class OceanMastersStateError(BotUserError):
+    """A tournament/match action called in a state that doesn't allow it
+    (e.g. creating a second tournament for a season, resolving an
+    already-decided match, launching with no tournament yet)."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class MatchNotFoundError(BotUserError):
+    def __init__(self) -> None:
+        super().__init__("That match doesn't exist.")
+
+
 # --- Phase 3: MANAVA Gateway ---
 
 

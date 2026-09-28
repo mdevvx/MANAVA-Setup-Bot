@@ -180,3 +180,35 @@ APPLICATION_REJECT_COOLDOWN_DAYS = 30
 # The very first season created gets this number; each subsequent Start Season /
 # Start New Season increments it.
 FIRST_SEASON_NUMBER = 1
+
+# --- Release 3, Milestone 2: Ocean Masters ---
+# These 4 channels already exist on the server (client-confirmed 2026-09-17) —
+# resolved by name like the squad/staff roles, never created by the bot.
+# Per the Product Spec's "Discord Presentation" table, ocean-masters-info is
+# static rules/explanation content (staff-curated) — the bot does NOT post
+# into it automatically, only into the other three (announcements/brackets/history).
+CHANNEL_NAME_OCEAN_MASTERS_INFO = "ocean-masters-info"
+CHANNEL_NAME_PREMIER_NEWS = "premier-news"
+CHANNEL_NAME_PREMIER_BRACKETS = "premier-brackets"
+CHANNEL_NAME_PREMIER_HISTORY = "premier-history"
+
+OCEAN_MASTERS_CHANNEL_NAMES: tuple[str, ...] = (
+    CHANNEL_NAME_OCEAN_MASTERS_INFO,
+    CHANNEL_NAME_PREMIER_NEWS,
+    CHANNEL_NAME_PREMIER_BRACKETS,
+    CHANNEL_NAME_PREMIER_HISTORY,
+)
+
+# bot_config keys. No seeded default for either — client confirmed no default
+# squad threshold was given, and the cross-game tie rule must stay unset
+# (blocking Cross-game creation) until an admin explicitly configures it.
+BOT_CONFIG_KEY_OCEAN_MASTERS_MIN_SQUADS = "ocean_masters_min_squads"
+BOT_CONFIG_KEY_CROSS_GAME_TIE_RULE = "cross_game_tie_rule"
+
+# The only implemented tie-break rule so far: on an equal discipline-win
+# count, the match stays pending and staff must resolve it manually via
+# `/oceanmasters match set-result`. Client decision (2026-09-23): don't
+# hard-code a permanent product rule — this is deliberately the one
+# concrete-but-provisional option, not a placeholder for "figure it out later".
+CROSS_GAME_TIE_RULE_STAFF_MANUAL = "staff_manual"
+ALL_CROSS_GAME_TIE_RULES: tuple[str, ...] = (CROSS_GAME_TIE_RULE_STAFF_MANUAL,)

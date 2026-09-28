@@ -95,7 +95,8 @@ class AdminCog(commands.Cog):
             name="Discord setup",
             value=(
                 f"Squad features: {'✅ ready' if bot.guild_state is not None else '❌ disabled (missing roles/categories)'}\n"
-                f"Applications: {'✅ ready' if bot.application_state is not None else '❌ disabled'}"
+                f"Applications: {'✅ ready' if bot.application_state is not None else '❌ disabled'}\n"
+                f"Ocean Masters channels: {'✅ ready' if bot.ocean_masters_state is not None else '❌ disabled (missing channels)'}"
             ),
             inline=False,
         )
@@ -405,6 +406,16 @@ class AdminCog(commands.Cog):
                     apps_status = "FAILED — see logs (applications feature disabled)"
                     success = False
 
+            if guild is not None:
+                self.bot.refresh_ocean_masters_state(guild)
+                om_status = (
+                    "OK — 4 channels resolved"
+                    if self.bot.ocean_masters_state is not None
+                    else "FAILED — see logs (Ocean Masters posting disabled)"
+                )
+            else:
+                om_status = "skipped — bot isn't in the configured guild"
+
             await self.bot.refresh_bot_config_cache()
 
         try:
@@ -421,6 +432,7 @@ class AdminCog(commands.Cog):
             f"Role/category check: {state_status}\n"
             f"Category permissions: {perms_status}\n"
             f"Applications setup: {apps_status}\n"
+            f"Ocean Masters channels: {om_status}\n"
             f"XP exclusion list / MANAVA mode cache: refreshed"
         )
 

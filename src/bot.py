@@ -14,6 +14,7 @@ from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import squads as squads_repo
 from src.discord_state import provisioning
 from src.discord_state.applications_setup import ResolvedApplicationState, ensure_application_state
+from src.discord_state.ocean_masters_setup import ResolvedOceanMastersState, resolve_ocean_masters_channels
 from src.discord_state.role_resolver import ResolvedGuildState, resolve_guild_state
 from src.discord_state.xp_channel_filter import is_message_xp_eligible, is_within_cooldown
 from src.errors import BotUserError, DiscordSetupError
@@ -40,6 +41,7 @@ class ManavaBot(commands.Bot):
         self.db_pool = db_pool
         self.guild_state: ResolvedGuildState | None = None
         self.application_state: ResolvedApplicationState | None = None
+        self.ocean_masters_state: ResolvedOceanMastersState | None = None
         self.xp_excluded_channel_ids: set[int] = set()
         self.application_review_channel_ids: dict[str, int] = {}
         self.started_at = discord.utils.utcnow()
@@ -58,6 +60,7 @@ class ManavaBot(commands.Bot):
         await self.load_extension("src.cogs.xp")
         await self.load_extension("src.cogs.seasons")
         await self.load_extension("src.cogs.applications")
+        await self.load_extension("src.cogs.ocean_masters")
 
         # Persistent views: keep every long-lived button working across a bot
         # restart — the application review buttons, the applicant's more-info
@@ -96,6 +99,7 @@ class ManavaBot(commands.Bot):
             logger.error("Squad features disabled until this is fixed: %s", exc.user_message)
 
         await self.refresh_application_state()
+        self.refresh_ocean_masters_state(guild)
         await self.refresh_bot_config_cache()
         logger.info("Logged in as %s (%s)", self.user, self.user.id if self.user else "?")
 
@@ -129,6 +133,17 @@ class ManavaBot(commands.Bot):
         except DiscordSetupError as exc:
             self.application_state = None
             logger.error("Applications feature disabled until this is fixed: %s", exc.user_message)
+
+    def refresh_ocean_masters_state(self, guild: discord.Guild) -> None:
+        """Resolve the 4 existing Ocean Masters channels by name. Independent
+        of guild_state/application_state — a failure here disables ONLY Ocean
+        Masters posting. Safe to call anytime (on_ready, !sync)."""
+        try:
+            self.ocean_masters_state = resolve_ocean_masters_channels(guild)
+            logger.info("Ocean Masters channels resolved successfully.")
+        except DiscordSetupError as exc:
+            self.ocean_masters_state = None
+            logger.error("Ocean Masters posting disabled until this is fixed: %s", exc.user_message)
 
     def require_application_state(self) -> ResolvedApplicationState:
         if self.application_state is None:

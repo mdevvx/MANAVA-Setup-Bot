@@ -27,6 +27,12 @@ def _row_to_squad(row: asyncpg.Record) -> Squad:
     )
 
 
+async def count_active(conn: asyncpg.Connection) -> int:
+    row = await conn.fetchrow("select count(*) as cnt from squads where status = 'active'")
+    assert row is not None
+    return int(row["cnt"])
+
+
 async def name_is_taken(conn: asyncpg.Connection, name: str) -> bool:
     row = await conn.fetchrow("select 1 from squads where name_lower = lower($1)", name)
     return row is not None

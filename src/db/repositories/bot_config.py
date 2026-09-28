@@ -52,3 +52,25 @@ async def set_application_review_channel(
     else:
         current[app_type_value] = channel_id
     await set_value(conn, constants.BOT_CONFIG_KEY_APP_REVIEW_CHANNELS, current)
+
+
+async def get_ocean_masters_min_squads(conn: asyncpg.Connection) -> int | None:
+    """None means "not configured" — no default was given (client-confirmed
+    2026-09-23), so the launch-readiness check is simply skipped until an
+    admin sets one via /oceanmasters set-min-squads."""
+    return await get_value(conn, constants.BOT_CONFIG_KEY_OCEAN_MASTERS_MIN_SQUADS, None)
+
+
+async def set_ocean_masters_min_squads(conn: asyncpg.Connection, value: int) -> None:
+    await set_value(conn, constants.BOT_CONFIG_KEY_OCEAN_MASTERS_MIN_SQUADS, value)
+
+
+async def get_cross_game_tie_rule(conn: asyncpg.Connection) -> str | None:
+    """None means unconfigured — Cross-game tournament creation must stay
+    blocked until this is set (client decision, 2026-09-23: don't hard-code a
+    permanent tie rule; block Cross-game until one is configured)."""
+    return await get_value(conn, constants.BOT_CONFIG_KEY_CROSS_GAME_TIE_RULE, None)
+
+
+async def set_cross_game_tie_rule(conn: asyncpg.Connection, rule: str) -> None:
+    await set_value(conn, constants.BOT_CONFIG_KEY_CROSS_GAME_TIE_RULE, rule)

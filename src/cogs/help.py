@@ -87,11 +87,40 @@ class HelpCog(commands.Cog):
             embed.add_field(
                 name="Seasons",
                 value=(
-                    "`/season status` — show the current season\n"
+                    "`/season status` — show the current season and phase\n"
                     "`/season start` — open a new season\n"
-                    "`/season end` — end the active season\n"
+                    "`/season lock` — Qualification Lock: freeze the ranking snapshot\n"
+                    "`/season publish-top32` — Confirm/Publish: assign seeds, make the bracket official\n"
+                    "`/season complete` — persist final standings and close the season\n"
+                    "`/season end` — end the active season (Qualification phase only)\n"
                     "`/season new` — end the current season and reset all Season XP "
                     "(Lifetime XP is kept; asks to confirm)"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Top-32 qualification",
+                value=(
+                    "`/season top32 list` — show the locked list / current Top-32 window\n"
+                    "`/season top32 withdraw squad:<...>` — pre-publish staff-confirmed withdrawal\n"
+                    "`/season top32 disqualify squad:<...> reason:<...>` — pre- or post-publish DQ flag"
+                ),
+                inline=False,
+            )
+            embed.add_field(
+                name="Ocean Masters",
+                value=(
+                    "`/oceanmasters create mode:<...> game1:<...> [game2] [game3]` — build the bracket "
+                    "from the published Top-32\n"
+                    "`/oceanmasters set-tie-rule rule:<...>` — required before Cross-game can be created\n"
+                    "`/oceanmasters set-min-squads value:<n>` — informational launch-readiness threshold\n"
+                    "`/oceanmasters launch` — go live (manual; never auto-triggered by the threshold)\n"
+                    "`/oceanmasters bracket` — view the current bracket\n"
+                    "`/oceanmasters match set-result match_id:<...> winner:<...>` — staff-entered result\n"
+                    "`/oceanmasters match set-discipline-result match_id:<...> game:<...> winner:<...>` — "
+                    "Cross-game, one discipline at a time\n"
+                    "`/oceanmasters match override match_id:<...> outcome:<...> winner:<...> reason:<...>` — "
+                    "technical loss / no-show / disqualified / forfeit"
                 ),
                 inline=False,
             )
