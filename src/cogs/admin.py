@@ -13,6 +13,7 @@ from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import personal_xp as xp_repo
 from src.db.repositories import squads as squads_repo
 from src.discord_state import applications_setup, provisioning
+from src.discord_state.ocean_masters_setup import missing_post_permissions
 from src.discord_state.role_resolver import resolve_guild_state
 from src.discord_state.staff_check import is_elevated_staff, require_elevated_staff
 from src.errors import BotUserError, DiscordSetupError
@@ -24,6 +25,28 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+
+def _ocean_masters_channel_lines(bot: ManavaBot) -> str:
+    """One line per Ocean Masters channel: which channel it resolved to and
+    whether the bot can actually post there."""
+    state = bot.ocean_masters_state
+    if state is None:
+        return f"❌ {bot.ocean_masters_error or 'not resolved yet (run !sync)'}"
+    lines: list[str] = []
+    for label, channel, posts in (
+        ("Info", state.info, False),
+        ("News", state.news, True),
+        ("Brackets", state.brackets, True),
+        ("History", state.history, True),
+    ):
+        if not posts:
+            lines.append(f"{label} → {channel.mention} · static, not posted to")
+            continue
+        missing = missing_post_permissions(channel)
+        check = "✅ can post" if not missing else "⚠️ missing " + ", ".join(missing)
+        lines.append(f"{label} → {channel.mention} · {check}")
+    return "\n".join(lines)
 
 class AdminCog(commands.Cog):
     def __init__(self, bot: "ManavaBot") -> None:
@@ -96,10 +119,11 @@ class AdminCog(commands.Cog):
             value=(
                 f"Squad features: {'✅ ready' if bot.guild_state is not None else '❌ disabled (missing roles/categories)'}\n"
                 f"Applications: {'✅ ready' if bot.application_state is not None else '❌ disabled'}\n"
-                f"Ocean Masters channels: {'✅ ready' if bot.ocean_masters_state is not None else '❌ disabled (missing channels)'}"
+                f"Ocean Masters channels: {'✅ ready' if bot.ocean_masters_state is not None else '❌ disabled (see below)'}"
             ),
             inline=False,
         )
+        embed.add_field(name="Ocean Masters channels", value=_ocean_masters_channel_lines(bot), inline=False)
         embed.add_field(
             name="MANAVA integration",
             value=(
