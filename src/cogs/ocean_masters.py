@@ -17,6 +17,7 @@ from src.db.repositories import squads as squads_repo
 from src.discord_state.staff_check import require_elevated_staff
 from src.errors import BotUserError
 from src.models.ocean_masters import (
+    CorrectionResult,
     MatchDecisionResult,
     MatchStatus,
     OceanMasters,
@@ -60,7 +61,7 @@ class OceanMastersCog(commands.Cog):
             async with self.bot.db_pool.acquire() as conn:
                 tournament = await _current_tournament(conn)
                 if tournament is None:
-                    return []
+                    return [_placeholder("No Ocean Masters tournament this season yet — run /oceanmasters create")]
                 matches = await ocean_masters_repo.get_bracket(conn, tournament.id)
         except Exception:  # noqa: BLE001 — autocomplete must never raise
             logger.exception("oceanmasters match autocomplete failed")
@@ -196,7 +197,7 @@ class OceanMastersCog(commands.Cog):
             "or type the code shown in `backticks`.",
         ]
         current_round = None
-        for m in matches:
+        for m in _bracket_display_order(matches):
             if m.round != current_round:
                 current_round = m.round
                 lines.append(f"\n**Round {current_round}**")
@@ -266,7 +267,7 @@ class OceanMastersCog(commands.Cog):
                 reason=reason,
                 channels=self.bot.ocean_masters_state,
             )
-        await interaction.followup.send(_decision_summary(result.match, result), ephemeral=True)
+        await interaction.followup.send(_correction_summary(result), ephemeral=True)
 
     @match_group.command(name="set-discipline-result", description="Cross-game: record one game's result for a match")
     @app_commands.describe(match_id="Pick a pending match", game="Which game", winner="Winning squad")
@@ -339,6 +340,7 @@ class OceanMastersCog(commands.Cog):
 _MATCH_CODE_LEN = 8
 _AUTOCOMPLETE_LIMIT = 25
 _MESSAGE_LIMIT = 2000
+_NO_MATCH = "none"
 
 
 def match_short_code(match: OceanMastersMatch) -> str:
@@ -357,24 +359,47 @@ def match_label(match: OceanMastersMatch) -> str:
     return label[: 100 - len(suffix)] + suffix
 
 
+def _placeholder(text: str) -> app_commands.Choice[str]:
+    """A single explanatory dropdown entry for when there's nothing to pick,
+    instead of Discord's bare "No options match your search"."""
+    return app_commands.Choice(name=text[:100], value=_NO_MATCH)
+
+
+def _bracket_display_order(matches: Sequence[OceanMastersMatch]) -> list[OceanMastersMatch]:
+    ordered: list[OceanMastersMatch] = []
+    for round_number in sorted({m.round for m in matches}):
+        ordered += ocean_masters_service.in_bracket_order([m for m in matches if m.round == round_number], round_number)
+    return ordered
+
+
 def match_choices(
     matches: Sequence[OceanMastersMatch], current: str, *, decided: bool
 ) -> list[app_commands.Choice[str]]:
     """Autocomplete options for match_id. Byes never show up: they're decided
-    automatically and there's no opponent to pick a winner from."""
+    automatically and there's no opponent to pick a winner from. The decided
+    list (correct-result) only offers matches correct_result will accept —
+    the same correction_blocker rule the service enforces."""
     needle = current.strip().strip("`").casefold()
     choices: list[app_commands.Choice[str]] = []
-    for m in matches:
+    for m in _bracket_display_order(matches):
         if m.squad_a_id is None or m.squad_b_id is None:
             continue
         if (m.status is not MatchStatus.PENDING) != decided:
             continue
+        if decided:
+            next_round = [n for n in matches if n.round == m.round + 1]
+            if ocean_masters_service.correction_blocker(m, next_round) is not None:
+                continue
         label = match_label(m)
         if needle and needle not in label.casefold():
             continue
         choices.append(app_commands.Choice(name=label, value=str(m.id)))
         if len(choices) == _AUTOCOMPLETE_LIMIT:
             break
+    if not choices and not needle:
+        if not decided:
+            return [_placeholder("No pending matches — every match in this bracket has a result")]
+        return [_placeholder("Nothing to correct — a result can be fixed until its next match has been played")]
     return choices
 
 
@@ -389,6 +414,8 @@ async def _resolve_match_id(conn: asyncpg.Connection, raw: str) -> UUID:
     """Accepts the full match UUID (what the dropdown fills in) or the short
     code shown in /oceanmasters bracket."""
     raw = raw.strip()
+    if raw == _NO_MATCH:
+        raise BotUserError("There's no match to pick for this command right now — check /oceanmasters bracket.")
     try:
         return UUID(raw)
     except ValueError:
@@ -421,6 +448,17 @@ def chunk_lines(lines: Sequence[str]) -> list[str]:
     if current:
         chunks.append(current)
     return chunks
+
+
+def _correction_summary(result: CorrectionResult) -> str:
+    m = result.match
+    winner_name = m.squad_a_name if m.winner_squad_id == m.squad_a_id else m.squad_b_name
+    lines = [f"Result corrected: **{winner_name}** is now the winner of this match."]
+    if result.champion_changed:
+        lines.append(f"🏆 **{winner_name}** is now the Ocean Masters champion. No public notice was posted.")
+    elif result.next_match is not None:
+        lines.append(f"They've replaced the other squad in their Round {result.next_match.round} match.")
+    return "\n".join(lines)
 
 
 def _decision_summary(match: OceanMastersMatch, result: MatchDecisionResult) -> str:

@@ -50,16 +50,18 @@ async def snapshot_all_active_squads(conn: asyncpg.Connection, season_id: UUID) 
         """,
         season_id,
     )
-    await _fill_ocean_masters_standings(conn, season_id)
+    await refresh_ocean_masters_standings(conn, season_id)
     return len(rows)
 
 
-async def _fill_ocean_masters_standings(conn: asyncpg.Connection, season_id: UUID) -> None:
+async def refresh_ocean_masters_standings(conn: asyncpg.Connection, season_id: UUID) -> None:
     """Populates `ocean_masters_final_standing` for every squad that appears
     in this season's Ocean Masters bracket, if one ran. A squad's furthest
     round is exactly max(round) across the matches it appears in — it keeps
     appearing in every later round until eliminated (or wins the final).
-    No-ops (leaves the column null) if no tournament exists for this season."""
+    No-ops (leaves the column null) if no tournament exists for this season.
+    Also re-run after an Ocean Masters result correction, so a season that
+    was already completed shows the corrected standings."""
     await conn.execute(
         """
         with t as (

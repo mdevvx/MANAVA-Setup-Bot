@@ -53,13 +53,46 @@ def test_pending_choices_carry_full_match_id_and_readable_label() -> None:
 def test_pending_and_decided_lists_are_separate() -> None:
     pending = _match()
     done = _match(seed_a=3, seed_b=4, status=MatchStatus.COMPLETED)
+    done = OceanMastersMatch(**{**_as_dict(done), "winner_squad_id": done.squad_a_id})
     assert [c.value for c in cog.match_choices([pending, done], "", decided=False)] == [str(pending.id)]
     assert [c.value for c in cog.match_choices([pending, done], "", decided=True)] == [str(done.id)]
 
 
 def test_byes_are_never_offered() -> None:
     bye = _match(b=None, status=MatchStatus.COMPLETED)
-    assert cog.match_choices([bye], "", decided=True) == []
+    assert [c.value for c in cog.match_choices([bye], "", decided=True)] == [cog._NO_MATCH]
+
+
+def test_correct_result_only_offers_matches_still_correctable() -> None:
+    r1_done = _match(status=MatchStatus.COMPLETED)
+    r1_done = OceanMastersMatch(**{**_as_dict(r1_done), "winner_squad_id": r1_done.squad_a_id})
+    # Next match not played yet: still correctable.
+    r2_pending = _match(round_=2)
+    r2_pending = OceanMastersMatch(**{**_as_dict(r2_pending), "squad_a_id": r1_done.winner_squad_id})
+    assert [c.value for c in cog.match_choices([r1_done, r2_pending], "", decided=True)] == [str(r1_done.id)]
+    # Next match already played: not correctable any more.
+    r2_played = OceanMastersMatch(
+        **{**_as_dict(r2_pending), "status": MatchStatus.COMPLETED, "winner_squad_id": r1_done.winner_squad_id}
+    )
+    # (the played round-2 match is the final here, so that one is offered instead)
+    assert [c.value for c in cog.match_choices([r1_done, r2_played], "", decided=True)] == [str(r2_played.id)]
+    # A decided final is correctable even after the tournament completed.
+    assert [c.value for c in cog.match_choices([r1_done], "", decided=True)] == [str(r1_done.id)]
+
+
+def _as_dict(m: OceanMastersMatch) -> dict[str, object]:
+    return {f: getattr(m, f) for f in OceanMastersMatch.__slots__}
+
+
+def test_empty_pending_list_explains_itself() -> None:
+    [choice] = cog.match_choices([_match(status=MatchStatus.COMPLETED)], "", decided=False)
+    assert choice.value == cog._NO_MATCH and len(choice.name) <= 100
+
+
+@pytest.mark.asyncio
+async def test_placeholder_value_gives_a_friendly_error() -> None:
+    with pytest.raises(BotUserError, match="no match to pick"):
+        await cog._resolve_match_id(AsyncMock(), cog._NO_MATCH)
 
 
 def test_typing_filters_by_squad_name_or_code() -> None:
@@ -72,11 +105,12 @@ def test_typing_filters_by_squad_name_or_code() -> None:
 
 def test_choices_capped_at_discord_limit_and_labels_fit() -> None:
     long_name = "X" * 99
-    matches = [_match(a=long_name, b=long_name, seed_a=i, seed_b=i + 1) for i in range(40)]
+    matches = [_match(a=long_name, b=long_name, seed_a=i, seed_b=65 - i) for i in range(1, 33)]
     choices = cog.match_choices(matches, "", decided=False)
     assert len(choices) == 25
     assert all(len(c.name) <= 100 for c in choices)
-    assert all(c.name.endswith(f"[{cog.match_short_code(m)}]") for c, m in zip(choices, matches))
+    by_id = {str(m.id): m for m in matches}
+    assert all(c.name.endswith(f"[{cog.match_short_code(by_id[c.value])}]") for c in choices)
 
 
 @pytest.mark.asyncio

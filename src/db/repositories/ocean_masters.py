@@ -119,6 +119,53 @@ async def mark_completed(conn: asyncpg.Connection, tournament_id: UUID, *, winne
     return _row_to_tournament(row)
 
 
+async def set_champion(conn: asyncpg.Connection, tournament_id: UUID, *, winner_squad_id: UUID) -> OceanMasters:
+    """Result correction on an already-completed final: swaps the champion,
+    keeping the original completed_at."""
+    row = await conn.fetchrow(
+        """
+        update ocean_masters
+        set winner_squad_id = $2
+        where id = $1 and status = 'completed'
+        returning *
+        """,
+        tournament_id,
+        winner_squad_id,
+    )
+    if row is None:
+        raise OceanMastersStateError("This tournament isn't completed, so there's no champion to correct.")
+    return _row_to_tournament(row)
+
+
+async def replace_match_squad(
+    conn: asyncpg.Connection, match_id: UUID, *, old_squad_id: UUID, new_squad_id: UUID, new_seed: int
+) -> OceanMastersMatch:
+    """Result correction: puts the corrected winner into the next-round match
+    in place of the squad that wrongly advanced. Only touches a match that
+    hasn't been played yet."""
+    row = await conn.fetchrow(
+        """
+        update ocean_masters_matches
+        set squad_a_id = case when squad_a_id = $2 then $3 else squad_a_id end,
+            seed_a     = case when squad_a_id = $2 then $4 else seed_a end,
+            squad_b_id = case when squad_b_id = $2 then $3 else squad_b_id end,
+            seed_b     = case when squad_b_id = $2 then $4 else seed_b end
+        where id = $1 and status = 'pending' and per_discipline_results = '{}'::jsonb
+          and (squad_a_id = $2 or squad_b_id = $2)
+        returning id
+        """,
+        match_id,
+        old_squad_id,
+        new_squad_id,
+        new_seed,
+    )
+    if row is None:
+        raise OceanMastersStateError(
+            "The next-round match changed while correcting this result — check /oceanmasters bracket and retry."
+        )
+    return await get_match(conn, match_id)
+
+
 async def insert_round(
     conn: asyncpg.Connection,
     tournament_id: UUID,

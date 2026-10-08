@@ -85,3 +85,13 @@ class MatchDecisionResult:
     match: OceanMastersMatch
     round_advanced: bool
     tournament_completed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CorrectionResult:
+    """What /oceanmasters match correct-result changed: the corrected match,
+    the next-round match the new winner was moved into (if that round already
+    existed), and whether the correction changed the tournament champion."""
+    match: OceanMastersMatch
+    next_match: OceanMastersMatch | None
+    champion_changed: bool

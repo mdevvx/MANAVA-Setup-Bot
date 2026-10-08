@@ -9,6 +9,7 @@ confirmed doesn't block building/QA-testing this module while disabled.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from uuid import UUID
 
 import asyncpg
@@ -18,6 +19,7 @@ from src import constants
 from src.db.repositories import audit_logs as audit_repo
 from src.db.repositories import bot_config as bot_config_repo
 from src.db.repositories import ocean_masters as ocean_masters_repo
+from src.db.repositories import season_history as season_history_repo
 from src.db.repositories import season_qualifications as season_qualifications_repo
 from src.db.repositories import seasons as seasons_repo
 from src.db.repositories import squads as squads_repo
@@ -25,11 +27,14 @@ from src.discord_state.ocean_masters_setup import ResolvedOceanMastersState
 from src.errors import OceanMastersStateError
 from src.models.ocean_masters import (
     OVERRIDE_MATCH_STATUSES,
+    CorrectionResult,
     CreateResult,
     MatchDecisionResult,
     MatchStatus,
     OceanMasters,
+    OceanMastersMatch,
     OceanMastersMode,
+    OceanMastersStatus,
 )
 from src.models.season import SeasonPhase
 
@@ -344,6 +349,58 @@ async def override_match(
     return MatchDecisionResult(match=decided, round_advanced=advanced, tournament_completed=completed)
 
 
+def in_bracket_order(matches: Sequence[OceanMastersMatch], round_number: int) -> list[OceanMastersMatch]:
+    """One round's matches in bracket position order (top of the bracket to
+    bottom), so adjacent pairs feed the same next-round match. A match's
+    position is fixed by the block of the standard seed order its seeds come
+    from: round r covers blocks of 2^r seeds. NOT the same as sorting by
+    seed_a — e.g. in an 8-squad bracket that would pair seed 1's and seed 2's
+    winners in the semi-final."""
+    if not matches:
+        return []
+    block = 2**round_number
+    order = {seed: i for i, seed in enumerate(_standard_bracket_seed_order(len(matches) * block))}
+    return sorted(matches, key=lambda m: order.get(m.seed_a, m.seed_a) // block)
+
+
+def find_next_match(
+    match: OceanMastersMatch, next_round_matches: Sequence[OceanMastersMatch]
+) -> OceanMastersMatch | None:
+    """The next-round match this match's current winner advanced into."""
+    if match.winner_squad_id is None:
+        return None
+    for nm in next_round_matches:
+        if match.winner_squad_id in (nm.squad_a_id, nm.squad_b_id):
+            return nm
+    return None
+
+
+def correction_blocker(match: OceanMastersMatch, next_round_matches: Sequence[OceanMastersMatch]) -> str | None:
+    """Why correct-result can't change this match, or None if it can. A
+    result stays correctable until the match it fed into has been played;
+    the final stays correctable even after the champion was announced."""
+    if match.status is MatchStatus.PENDING:
+        return "This match hasn't been decided yet — use /oceanmasters match set-result."
+    if match.squad_a_id is None or match.squad_b_id is None:
+        return "Byes are decided automatically and can't be corrected."
+    if not next_round_matches:
+        return None
+    next_match = find_next_match(match, next_round_matches)
+    if next_match is None:
+        return "Couldn't find the next-round match this result fed into. Contact support for a manual fix."
+    if next_match.status is not MatchStatus.PENDING:
+        return (
+            f"The Round {next_match.round} match this result fed into already has a result, so correcting it "
+            "would mean unwinding that match too. Contact support for a manual fix."
+        )
+    if next_match.per_discipline_results:
+        return (
+            f"Discipline results have already been recorded for the Round {next_match.round} match this result "
+            "fed into, so it can't be corrected here. Contact support for a manual fix."
+        )
+    return None
+
+
 async def correct_result(
     conn: asyncpg.Connection,
     match_id: UUID,
@@ -352,49 +409,64 @@ async def correct_result(
     actor_id: int,
     reason: str,
     channels: ResolvedOceanMastersState | None,
-) -> MatchDecisionResult:
+) -> CorrectionResult:
     """'Result correction' / 'integration-failure override' — the Technical
     Scope lists these alongside technical loss/no-show/DQ/forfeit as part of
-    the same staff override suite. Fixes a match that was already decided.
-    Deliberately bounded: only safe while the next round hasn't been built
-    off it yet (or, for a final, before the tournament was marked complete)
-    — correcting past that point would leave a later round pointing at the
-    wrong squad, which this does not attempt to unwind."""
+    the same staff override suite. Fixes a match that was already decided:
+    if the next round already exists, the corrected winner replaces the
+    wrongly-advanced squad in its next match (as long as that match hasn't
+    been played); if it's the final, the champion is swapped and the season's
+    Ocean Masters standings are refreshed. Deliberately posts nothing to the
+    public tournament channels — the client hasn't asked for correction
+    notices; `channels` is kept for signature parity with the other paths."""
     match = await ocean_masters_repo.get_match(conn, match_id)
     if match.status is MatchStatus.PENDING:
         raise OceanMastersStateError("This match hasn't been decided yet — use /oceanmasters match set-result.")
     if winner_squad_id not in (match.squad_a_id, match.squad_b_id):
         raise OceanMastersStateError("That squad isn't one of the two in this match.")
-
-    tournament = await ocean_masters_repo.get_by_id(conn, match.tournament_id)
-    if tournament.status.value == "completed":
-        raise OceanMastersStateError(
-            "This tournament is already complete and its champion has been announced — "
-            "correcting the final result isn't supported here. Contact support for a manual fix."
-        )
     next_round_matches = await ocean_masters_repo.get_round_matches(conn, match.tournament_id, match.round + 1)
-    if next_round_matches:
-        raise OceanMastersStateError(
-            "The next round has already been generated from this match's result — correcting it now "
-            "would leave that round pointing at the wrong squad. Contact support for a manual fix."
-        )
+    blocker = correction_blocker(match, next_round_matches)
+    if blocker is not None:
+        raise OceanMastersStateError(blocker)
+
+    old_winner = match.winner_squad_id
+    assert old_winner is not None
+    tournament = await ocean_masters_repo.get_by_id(conn, match.tournament_id)
+    winner_changed = winner_squad_id != old_winner
+    next_match = find_next_match(match, next_round_matches)
+    is_completed_final = not next_round_matches and tournament.status is OceanMastersStatus.COMPLETED
 
     async with conn.transaction():
         decided = await ocean_masters_repo.correct_match(
             conn, match_id, winner_squad_id=winner_squad_id, decided_by=actor_id, reason=reason
         )
-        advanced, completed = await _try_advance_round(conn, match.tournament_id, match.round, channels=channels)
+        updated_next: OceanMastersMatch | None = None
+        if next_match is not None and winner_changed:
+            new_seed = match.seed_a if winner_squad_id == match.squad_a_id else match.seed_b
+            updated_next = await ocean_masters_repo.replace_match_squad(
+                conn, next_match.id, old_squad_id=old_winner, new_squad_id=winner_squad_id, new_seed=new_seed
+            )
+        champion_changed = is_completed_final and winner_changed
+        if champion_changed:
+            await ocean_masters_repo.set_champion(conn, tournament.id, winner_squad_id=winner_squad_id)
+            await season_history_repo.refresh_ocean_masters_standings(conn, tournament.season_id)
         await audit_repo.record(
             conn,
             actor_id=actor_id,
             action="oceanmasters.match.correct_result",
             target_type="ocean_masters_match",
             target_id=str(match_id),
-            old_value={"status": match.status.value, "winner_squad_id": str(match.winner_squad_id)},
-            new_value={"status": "completed", "winner_squad_id": str(winner_squad_id)},
+            old_value={"status": match.status.value, "winner_squad_id": str(old_winner)},
+            new_value={
+                "status": "completed",
+                "winner_squad_id": str(winner_squad_id),
+                "next_match_id": str(updated_next.id) if updated_next else None,
+                "champion_changed": champion_changed,
+            },
             reason=reason,
         )
-    return MatchDecisionResult(match=decided, round_advanced=advanced, tournament_completed=completed)
+
+    return CorrectionResult(match=decided, next_match=updated_next, champion_changed=champion_changed)
 
 
 async def _resolve_byes_and_cascade(
@@ -425,7 +497,9 @@ async def _try_advance_round(
 ) -> tuple[bool, bool]:
     """Returns (round_advanced, tournament_completed). No-ops if the round
     isn't fully decided yet."""
-    matches = await ocean_masters_repo.get_round_matches(conn, tournament_id, round_number)
+    matches = in_bracket_order(
+        await ocean_masters_repo.get_round_matches(conn, tournament_id, round_number), round_number
+    )
     if any(m.winner_squad_id is None for m in matches):
         return False, False
 
