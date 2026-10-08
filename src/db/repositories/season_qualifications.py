@@ -146,7 +146,7 @@ async def assign_seeds_at_publish(conn: asyncpg.Connection, season_id: UUID) -> 
     Returns how many seeds were assigned."""
     rows = await conn.fetch(
         """
-        with window as (
+        with seed_window as (
             select squad_id, row_number() over (order by rank) as seed
             from season_qualifications
             where season_id = $1 and status = 'qualified'
@@ -155,7 +155,7 @@ async def assign_seeds_at_publish(conn: asyncpg.Connection, season_id: UUID) -> 
         )
         update season_qualifications sq
         set seed = w.seed
-        from window w
+        from seed_window w
         where sq.season_id = $1 and sq.squad_id = w.squad_id
         returning w.seed
         """,
