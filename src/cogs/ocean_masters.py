@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from collections.abc import Sequence
 from uuid import UUID
 
+import asyncpg
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -14,7 +16,13 @@ from src.db.repositories import seasons as seasons_repo
 from src.db.repositories import squads as squads_repo
 from src.discord_state.staff_check import require_elevated_staff
 from src.errors import BotUserError
-from src.models.ocean_masters import MatchDecisionResult, MatchStatus, OceanMastersMatch, OceanMastersMode
+from src.models.ocean_masters import (
+    MatchDecisionResult,
+    MatchStatus,
+    OceanMasters,
+    OceanMastersMatch,
+    OceanMastersMode,
+)
 from src.services import ocean_masters_service
 
 if TYPE_CHECKING:
@@ -46,6 +54,47 @@ class OceanMastersCog(commands.Cog):
             logger.exception("oceanmasters squad autocomplete failed")
             return []
         return [app_commands.Choice(name=n, value=n) for n in names]
+
+    async def _match_choices(self, current: str, *, decided: bool) -> list[app_commands.Choice[str]]:
+        try:
+            async with self.bot.db_pool.acquire() as conn:
+                tournament = await _current_tournament(conn)
+                if tournament is None:
+                    return []
+                matches = await ocean_masters_repo.get_bracket(conn, tournament.id)
+        except Exception:  # noqa: BLE001 — autocomplete must never raise
+            logger.exception("oceanmasters match autocomplete failed")
+            return []
+        return match_choices(matches, current, decided=decided)
+
+    async def _pending_match_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._match_choices(current, decided=False)
+
+    async def _decided_match_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return await self._match_choices(current, decided=True)
+
+    async def _match_winner_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Once match_id is filled in, only offer that match's two squads;
+        otherwise fall back to every active squad."""
+        raw_match = getattr(interaction.namespace, "match_id", None)
+        if raw_match:
+            match: OceanMastersMatch | None
+            try:
+                async with self.bot.db_pool.acquire() as conn:
+                    match = await ocean_masters_repo.get_match(conn, await _resolve_match_id(conn, str(raw_match)))
+            except Exception:  # noqa: BLE001 — autocomplete must never raise
+                match = None
+            if match is not None:
+                names = [n for n in (match.squad_a_name, match.squad_b_name) if n]
+                needle = current.casefold()
+                return [app_commands.Choice(name=n, value=n) for n in names if needle in n.casefold()]
+        return await self._active_squad_autocomplete(interaction, current)
 
     @om_group.command(name="create", description="Set up the Ocean Masters bracket from the published Top-32")
     @app_commands.describe(
@@ -141,7 +190,11 @@ class OceanMastersCog(commands.Cog):
                 return
             matches = await ocean_masters_repo.get_bracket(conn, tournament.id)
 
-        lines = [f"**Ocean Masters** — {tournament.mode.value} · {tournament.status.value}"]
+        lines = [
+            f"**Ocean Masters** — {tournament.mode.value} · {tournament.status.value}",
+            "-# Pick a match from the `match_id` dropdown of any `/oceanmasters match` command, "
+            "or type the code shown in `backticks`.",
+        ]
         current_round = None
         for m in matches:
             if m.round != current_round:
@@ -149,20 +202,22 @@ class OceanMastersCog(commands.Cog):
                 lines.append(f"\n**Round {current_round}**")
             a = m.squad_a_name or "(bye)"
             b = m.squad_b_name or "(bye)"
+            code = f"`{match_short_code(m)}` "
             if m.winner_squad_id is not None:
                 winner = a if m.winner_squad_id == m.squad_a_id else b
-                lines.append(f"#{m.seed_a} {a} v #{m.seed_b} {b} — **{winner}** ({m.status.value})")
+                lines.append(f"{code}#{m.seed_a} {a} v #{m.seed_b} {b} — **{winner}** ({m.status.value})")
             else:
-                lines.append(f"#{m.seed_a} {a} v #{m.seed_b} {b} — pending")
-        await interaction.followup.send("\n".join(lines), ephemeral=True)
+                lines.append(f"{code}#{m.seed_a} {a} v #{m.seed_b} {b} — pending")
+        for chunk in chunk_lines(lines):
+            await interaction.followup.send(chunk, ephemeral=True)
 
     # --- Match decisions -----------------------------------------------------
 
     match_group = app_commands.Group(name="match", description="Ocean Masters match results", parent=om_group)
 
     @match_group.command(name="set-result", description="Staff-entered match result (Single-game, or to break a Cross-game tie)")
-    @app_commands.describe(match_id="Match ID (from /oceanmasters bracket)", winner="Winning squad", reason="Optional")
-    @app_commands.autocomplete(winner=_active_squad_autocomplete)
+    @app_commands.describe(match_id="Pick a pending match", winner="Winning squad", reason="Optional")
+    @app_commands.autocomplete(match_id=_pending_match_autocomplete, winner=_match_winner_autocomplete)
     async def set_result(
         self, interaction: discord.Interaction, match_id: str, winner: str, reason: str | None = None
     ) -> None:
@@ -174,7 +229,7 @@ class OceanMastersCog(commands.Cog):
                 raise BotUserError(f"No active squad named **{winner}** was found.")
             result = await ocean_masters_service.set_result(
                 conn,
-                _parse_match_id(match_id),
+                await _resolve_match_id(conn, match_id),
                 winner_squad_id=squad.id,
                 actor_id=interaction.user.id,
                 reason=reason,
@@ -187,11 +242,11 @@ class OceanMastersCog(commands.Cog):
         description="Fix an already-decided match (result correction / integration-failure override)",
     )
     @app_commands.describe(
-        match_id="Match ID (from /oceanmasters bracket)",
+        match_id="Pick an already-decided match",
         winner="The correct winning squad",
         reason="Required — recorded in the audit log",
     )
-    @app_commands.autocomplete(winner=_active_squad_autocomplete)
+    @app_commands.autocomplete(match_id=_decided_match_autocomplete, winner=_match_winner_autocomplete)
     async def correct_result(
         self, interaction: discord.Interaction, match_id: str, winner: str, reason: str
     ) -> None:
@@ -205,7 +260,7 @@ class OceanMastersCog(commands.Cog):
                 raise BotUserError(f"No active squad named **{winner}** was found.")
             result = await ocean_masters_service.correct_result(
                 conn,
-                _parse_match_id(match_id),
+                await _resolve_match_id(conn, match_id),
                 winner_squad_id=squad.id,
                 actor_id=interaction.user.id,
                 reason=reason,
@@ -214,9 +269,9 @@ class OceanMastersCog(commands.Cog):
         await interaction.followup.send(_decision_summary(result.match, result), ephemeral=True)
 
     @match_group.command(name="set-discipline-result", description="Cross-game: record one game's result for a match")
-    @app_commands.describe(match_id="Match ID (from /oceanmasters bracket)", game="Which game", winner="Winning squad")
+    @app_commands.describe(match_id="Pick a pending match", game="Which game", winner="Winning squad")
     @app_commands.choices(game=_GAME_CHOICES)
-    @app_commands.autocomplete(winner=_active_squad_autocomplete)
+    @app_commands.autocomplete(match_id=_pending_match_autocomplete, winner=_match_winner_autocomplete)
     async def set_discipline_result(
         self, interaction: discord.Interaction, match_id: str, game: str, winner: str
     ) -> None:
@@ -228,7 +283,7 @@ class OceanMastersCog(commands.Cog):
                 raise BotUserError(f"No active squad named **{winner}** was found.")
             result = await ocean_masters_service.set_discipline_result(
                 conn,
-                _parse_match_id(match_id),
+                await _resolve_match_id(conn, match_id),
                 game=game,
                 winner_squad_id=squad.id,
                 actor_id=interaction.user.id,
@@ -244,7 +299,7 @@ class OceanMastersCog(commands.Cog):
 
     @match_group.command(name="override", description="Staff override: technical loss, no-show, disqualified, or forfeit")
     @app_commands.describe(
-        match_id="Match ID (from /oceanmasters bracket)",
+        match_id="Pick a pending match",
         outcome="What happened",
         winner="Squad that advances",
         reason="Required — recorded in the audit log",
@@ -257,7 +312,7 @@ class OceanMastersCog(commands.Cog):
             app_commands.Choice(name="Forfeit", value=MatchStatus.FORFEIT.value),
         ]
     )
-    @app_commands.autocomplete(winner=_active_squad_autocomplete)
+    @app_commands.autocomplete(match_id=_pending_match_autocomplete, winner=_match_winner_autocomplete)
     async def override(
         self, interaction: discord.Interaction, match_id: str, outcome: str, winner: str, reason: str
     ) -> None:
@@ -271,7 +326,7 @@ class OceanMastersCog(commands.Cog):
                 raise BotUserError(f"No active squad named **{winner}** was found.")
             result = await ocean_masters_service.override_match(
                 conn,
-                _parse_match_id(match_id),
+                await _resolve_match_id(conn, match_id),
                 outcome=MatchStatus(outcome),
                 winner_squad_id=squad.id,
                 actor_id=interaction.user.id,
@@ -281,11 +336,91 @@ class OceanMastersCog(commands.Cog):
         await interaction.followup.send(_decision_summary(result.match, result), ephemeral=True)
 
 
-def _parse_match_id(raw: str) -> UUID:
+_MATCH_CODE_LEN = 8
+_AUTOCOMPLETE_LIMIT = 25
+_MESSAGE_LIMIT = 2000
+
+
+def match_short_code(match: OceanMastersMatch) -> str:
+    """The code shown in /oceanmasters bracket: the first characters of the
+    match UUID, unique enough within one tournament (at most 31 matches)."""
+    return match.id.hex[:_MATCH_CODE_LEN]
+
+
+def match_label(match: OceanMastersMatch) -> str:
+    a = match.squad_a_name or "(bye)"
+    b = match.squad_b_name or "(bye)"
+    label = f"R{match.round} · #{match.seed_a} {a} v #{match.seed_b} {b}"
+    if match.status is not MatchStatus.PENDING:
+        label += f" — {match.status.value}"
+    suffix = f" [{match_short_code(match)}]"
+    return label[: 100 - len(suffix)] + suffix
+
+
+def match_choices(
+    matches: Sequence[OceanMastersMatch], current: str, *, decided: bool
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete options for match_id. Byes never show up: they're decided
+    automatically and there's no opponent to pick a winner from."""
+    needle = current.strip().strip("`").casefold()
+    choices: list[app_commands.Choice[str]] = []
+    for m in matches:
+        if m.squad_a_id is None or m.squad_b_id is None:
+            continue
+        if (m.status is not MatchStatus.PENDING) != decided:
+            continue
+        label = match_label(m)
+        if needle and needle not in label.casefold():
+            continue
+        choices.append(app_commands.Choice(name=label, value=str(m.id)))
+        if len(choices) == _AUTOCOMPLETE_LIMIT:
+            break
+    return choices
+
+
+async def _current_tournament(conn: asyncpg.Connection) -> OceanMasters | None:
+    season = await seasons_repo.get_active(conn)
+    if season is None:
+        return None
+    return await ocean_masters_repo.get_by_season(conn, season.id)
+
+
+async def _resolve_match_id(conn: asyncpg.Connection, raw: str) -> UUID:
+    """Accepts the full match UUID (what the dropdown fills in) or the short
+    code shown in /oceanmasters bracket."""
+    raw = raw.strip()
     try:
         return UUID(raw)
-    except ValueError as exc:
-        raise BotUserError("That doesn't look like a valid match ID — copy it from /oceanmasters bracket.") from exc
+    except ValueError:
+        pass
+    code = raw.strip("`").lower()
+    if len(code) < 4 or any(ch not in "0123456789abcdef" for ch in code):
+        raise BotUserError("Pick the match from the `match_id` dropdown, or type its code from /oceanmasters bracket.")
+    tournament = await _current_tournament(conn)
+    if tournament is None:
+        raise BotUserError("No Ocean Masters tournament exists for this season yet.")
+    ids = await ocean_masters_repo.find_match_ids_by_prefix(conn, tournament.id, code)
+    if not ids:
+        raise BotUserError(f"No match with code `{code}` in this season's Ocean Masters.")
+    if len(ids) > 1:
+        raise BotUserError(f"Match code `{code}` matches more than one match — pick it from the dropdown instead.")
+    return ids[0]
+
+
+def chunk_lines(lines: Sequence[str]) -> list[str]:
+    """Splits the bracket across messages so a full 32-squad bracket never
+    hits Discord's 2000-character limit."""
+    chunks: list[str] = []
+    current = ""
+    for line in lines:
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > _MESSAGE_LIMIT and current:
+            chunks.append(current)
+            candidate = line.lstrip("\n")
+        current = candidate
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 def _decision_summary(match: OceanMastersMatch, result: MatchDecisionResult) -> str:

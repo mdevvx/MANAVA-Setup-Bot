@@ -173,6 +173,18 @@ async def get_bracket(conn: asyncpg.Connection, tournament_id: UUID) -> list[Oce
     return [_row_to_match(r) for r in rows]
 
 
+async def find_match_ids_by_prefix(conn: asyncpg.Connection, tournament_id: UUID, prefix: str) -> list[UUID]:
+    """Resolves the short match code shown in /oceanmasters bracket (the
+    first characters of the match UUID) within one tournament. Callers treat
+    more than one hit as ambiguous."""
+    rows = await conn.fetch(
+        "select id from ocean_masters_matches where tournament_id = $1 and id::text like $2 || '%' limit 2",
+        tournament_id,
+        prefix.lower(),
+    )
+    return [r["id"] for r in rows]
+
+
 async def set_discipline_result(
     conn: asyncpg.Connection, match_id: UUID, game: str, winner_squad_id: UUID
 ) -> OceanMastersMatch:
