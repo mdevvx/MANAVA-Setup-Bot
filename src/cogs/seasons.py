@@ -82,6 +82,8 @@ class SeasonsCog(commands.Cog):
     @season_group.command(name="lock", description="Qualification Lock: freeze the qualification ranking snapshot")
     async def lock(self, interaction: discord.Interaction) -> None:
         await require_elevated_staff(self.bot, interaction)
+        async with self.bot.db_pool.acquire() as conn:
+            await season_service.precheck_lock(conn)
 
         async def do_lock(confirm_interaction: discord.Interaction) -> None:
             async with self.bot.db_pool.acquire() as conn:
@@ -100,12 +102,15 @@ class SeasonsCog(commands.Cog):
             view=view,
             ephemeral=True,
         )
+        view.bind(interaction)
 
     @season_group.command(
         name="publish-top32", description="Confirm / Publish: assign seeds and make the Top-32 bracket official"
     )
     async def publish_top32(self, interaction: discord.Interaction) -> None:
         await require_elevated_staff(self.bot, interaction)
+        async with self.bot.db_pool.acquire() as conn:
+            await season_service.precheck_publish(conn)
 
         async def do_publish(confirm_interaction: discord.Interaction) -> None:
             async with self.bot.db_pool.acquire() as conn:
@@ -119,18 +124,21 @@ class SeasonsCog(commands.Cog):
 
         view = ConfirmView(invoker_id=interaction.user.id, on_confirm=do_publish)
         await interaction.response.send_message(
-            "**Publish the Top-32 bracket?** This assigns seeds 1-32 over whichever squads are still "
-            "qualified and freezes the list as official. Once published, replacements are no longer "
+            "**Publish the Top-32 bracket?** This assigns seeds (1-32, or fewer if fewer squads qualified) "
+            "over whichever squads are still qualified and freezes the list as official. Once published, replacements are no longer "
             "automatic — only staff DQ/forfeit/override.",
             view=view,
             ephemeral=True,
         )
+        view.bind(interaction)
 
     @season_group.command(
         name="complete", description="Season Complete: persist the final standings and close the season"
     )
     async def complete(self, interaction: discord.Interaction) -> None:
         await require_elevated_staff(self.bot, interaction)
+        async with self.bot.db_pool.acquire() as conn:
+            await season_service.precheck_complete(conn)
 
         async def do_complete(confirm_interaction: discord.Interaction) -> None:
             async with self.bot.db_pool.acquire() as conn:
@@ -150,6 +158,7 @@ class SeasonsCog(commands.Cog):
             view=view,
             ephemeral=True,
         )
+        view.bind(interaction)
 
     @season_group.command(
         name="new",
@@ -157,6 +166,8 @@ class SeasonsCog(commands.Cog):
     )
     async def new(self, interaction: discord.Interaction) -> None:
         await require_elevated_staff(self.bot, interaction)
+        async with self.bot.db_pool.acquire() as conn:
+            await season_service.precheck_new_season(conn)
 
         async def do_reset(confirm_interaction: discord.Interaction) -> None:
             async with self.bot.db_pool.acquire() as conn:
@@ -181,6 +192,7 @@ class SeasonsCog(commands.Cog):
             view=view,
             ephemeral=True,
         )
+        view.bind(interaction)
 
     # --- Top-32 qualification list -----------------------------------------
 

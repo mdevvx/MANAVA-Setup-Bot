@@ -415,10 +415,11 @@ async def correct_result(
     the same staff override suite. Fixes a match that was already decided:
     if the next round already exists, the corrected winner replaces the
     wrongly-advanced squad in its next match (as long as that match hasn't
-    been played); if it's the final, the champion is swapped and the season's
-    Ocean Masters standings are refreshed. Deliberately posts nothing to the
-    public tournament channels — the client hasn't asked for correction
-    notices; `channels` is kept for signature parity with the other paths."""
+    been played); if it's the final, the champion is swapped, the season's
+    Ocean Masters standings are refreshed, and a correction notice is posted
+    to #premier-history so the public champion announcement doesn't go
+    stale (client request, 2026-10-09). Mid-bracket corrections post nothing
+    publicly."""
     match = await ocean_masters_repo.get_match(conn, match_id)
     if match.status is MatchStatus.PENDING:
         raise OceanMastersStateError("This match hasn't been decided yet — use /oceanmasters match set-result.")
@@ -466,6 +467,16 @@ async def correct_result(
             reason=reason,
         )
 
+    if champion_changed and channels is not None:
+        new_name = decided.squad_a_name if winner_squad_id == decided.squad_a_id else decided.squad_b_name
+        old_name = decided.squad_b_name if winner_squad_id == decided.squad_a_id else decided.squad_a_name
+        try:
+            await channels.history.send(
+                "⚠️ **Correction:** the Ocean Masters final result has been corrected.\n"
+                f"🏆 **Ocean Masters champion: {new_name}** (previously announced: {old_name})"
+            )
+        except discord.DiscordException:
+            logger.exception("Failed posting the Ocean Masters champion correction to #premier-history")
     return CorrectionResult(match=decided, next_match=updated_next, champion_changed=champion_changed)
 
 

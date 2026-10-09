@@ -50,6 +50,82 @@ def _require_endable(active: Season | None, *, command: str) -> Season:
     return active
 
 
+_PHASE_LABELS: dict[SeasonPhase, str] = {
+    SeasonPhase.QUALIFICATION: "Qualification",
+    SeasonPhase.QUALIFICATION_LOCK: "Qualification Lock",
+    SeasonPhase.TOP32_PLAYOFFS: "Top-32 Playoffs",
+    SeasonPhase.SEASON_COMPLETE: "Season Complete",
+}
+
+
+def require_lockable(active: Season | None) -> Season:
+    """Pre-check for /season lock, run before the Confirm prompt is shown
+    (and again inside the transaction, in case two staff race)."""
+    if active is None:
+        raise SeasonStateError("There's no active season to lock — run /season start first.")
+    if active.phase is SeasonPhase.QUALIFICATION_LOCK:
+        raise SeasonStateError(
+            f"Season {active.season_number} is already locked. Check the list with /season top32 list, "
+            "then run /season publish-top32."
+        )
+    if active.phase is not SeasonPhase.QUALIFICATION:
+        raise SeasonStateError(
+            f"Season {active.season_number} is past Qualification (phase: {_PHASE_LABELS[active.phase]}), "
+            "so it can't be locked again."
+        )
+    return active
+
+
+def require_publishable(active: Season | None, qualified_count: int) -> Season:
+    """Pre-check for /season publish-top32."""
+    if active is None:
+        raise SeasonStateError("There's no active season to publish.")
+    if active.phase is SeasonPhase.QUALIFICATION:
+        raise SeasonStateError(
+            f"Season {active.season_number} isn't locked yet — run /season lock first to freeze the "
+            "qualification list."
+        )
+    if active.phase is not SeasonPhase.QUALIFICATION_LOCK:
+        raise SeasonStateError(
+            f"Season {active.season_number}'s Top-32 is already published (phase: {_PHASE_LABELS[active.phase]})."
+        )
+    if qualified_count == 0:
+        raise SeasonStateError(
+            f"Season {active.season_number}'s qualification list has no squads still qualified, so there's "
+            "nothing to publish."
+        )
+    return active
+
+
+def require_completable(active: Season | None) -> Season:
+    """Pre-check for /season complete — allowed from any phase of an active season."""
+    if active is None:
+        raise SeasonStateError("There's no active season to complete.")
+    return active
+
+
+async def precheck_lock(conn: asyncpg.Connection) -> Season:
+    return require_lockable(await seasons_repo.get_active(conn))
+
+
+async def precheck_publish(conn: asyncpg.Connection) -> Season:
+    active = await seasons_repo.get_active(conn)
+    qualified = await season_qualifications_repo.get_top32_window(conn, active.id) if active is not None else []
+    return require_publishable(active, len(qualified))
+
+
+async def precheck_complete(conn: asyncpg.Connection) -> Season:
+    return require_completable(await seasons_repo.get_active(conn))
+
+
+async def precheck_new_season(conn: asyncpg.Connection) -> Season | None:
+    """/season new is allowed with no active season (it just opens one)."""
+    active = await seasons_repo.get_active(conn)
+    if active is not None:
+        _require_endable(active, command="start a new season")
+    return active
+
+
 async def get_current(conn: asyncpg.Connection) -> Season | None:
     return await seasons_repo.get_current(conn)
 
@@ -140,9 +216,7 @@ async def lock_qualification(conn: asyncpg.Connection, *, actor_id: int) -> Lock
     active squad's current ranking (not only the top 32) into
     season_qualifications, freezing Season + Lifetime Squad XP as of now."""
     async with conn.transaction():
-        active = await seasons_repo.get_active(conn)
-        if active is None:
-            raise SeasonStateError("There's no active season to lock.")
+        active = require_lockable(await seasons_repo.get_active(conn))
         season = await seasons_repo.lock(conn, active.id, actor_id=actor_id)
         squads_ranked = await season_qualifications_repo.snapshot_at_lock(conn, season.id)
         result = LockResult(season_id=season.id, season_number=season.season_number, squads_ranked=squads_ranked)
@@ -165,8 +239,8 @@ async def publish_top32(conn: asyncpg.Connection, *, actor_id: int) -> PublishRe
     order) and freezes the list as official — the Confirm/Publish step."""
     async with conn.transaction():
         active = await seasons_repo.get_active(conn)
-        if active is None:
-            raise SeasonStateError("There's no active season to publish.")
+        qualified = await season_qualifications_repo.get_top32_window(conn, active.id) if active is not None else []
+        active = require_publishable(active, len(qualified))
         season = await seasons_repo.advance_to_playoffs(conn, active.id, actor_id=actor_id)
         seeds_assigned = await season_qualifications_repo.assign_seeds_at_publish(conn, season.id)
         result = PublishResult(
@@ -193,9 +267,7 @@ async def complete_season(conn: asyncpg.Connection, *, actor_id: int) -> Complet
     not-qualified. Does NOT reset XP or open a new season — that stays
     /season new's job, unchanged."""
     async with conn.transaction():
-        active = await seasons_repo.get_active(conn)
-        if active is None:
-            raise SeasonStateError("There's no active season to complete.")
+        active = require_completable(await seasons_repo.get_active(conn))
         season = await seasons_repo.mark_complete(conn, active.id, actor_id=actor_id)
         squads_recorded = await season_history_repo.snapshot_all_active_squads(conn, season.id)
         result = CompleteResult(

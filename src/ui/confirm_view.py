@@ -25,6 +25,22 @@ class ConfirmView(discord.ui.View):
         super().__init__(timeout=timeout)
         self._invoker_id = invoker_id
         self._on_confirm = on_confirm
+        self._prompt: discord.Interaction | None = None
+
+    def bind(self, interaction: discord.Interaction) -> None:
+        """Optional: the interaction whose response holds this prompt, so an
+        unanswered prompt can be disabled on timeout instead of leaving dead
+        buttons that just fail when clicked."""
+        self._prompt = interaction
+
+    async def on_timeout(self) -> None:
+        if self._prompt is None:
+            return
+        self._disable_all()
+        try:
+            await self._prompt.edit_original_response(content="Timed out — nothing was changed.", view=self)
+        except discord.DiscordException:
+            logger.debug("Couldn't disable a timed-out confirm prompt", exc_info=True)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self._invoker_id:

@@ -88,6 +88,9 @@ async def test_publish_top32_assigns_seeds_and_audits(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         season_service.season_qualifications_repo, "assign_seeds_at_publish", AsyncMock(return_value=32)
     )
+    monkeypatch.setattr(
+        season_service.season_qualifications_repo, "get_top32_window", AsyncMock(return_value=[object()] * 32)
+    )
     audit = AsyncMock()
     monkeypatch.setattr(season_service.audit_repo, "record", audit)
 
@@ -131,3 +134,37 @@ async def test_complete_season_with_no_active_season_raises(monkeypatch: pytest.
     with pytest.raises(SeasonStateError):
         await season_service.complete_season(conn, actor_id=9)  # type: ignore[arg-type]
     complete_mock.assert_not_awaited()
+
+
+# --- Pre-checks: invalid states fail before the Confirm prompt is shown -----------
+
+
+def test_repeated_lock_is_rejected_with_a_clear_message() -> None:
+    with pytest.raises(SeasonStateError, match="already locked"):
+        season_service.require_lockable(_season(phase=SeasonPhase.QUALIFICATION_LOCK))
+    with pytest.raises(SeasonStateError, match="past Qualification"):
+        season_service.require_lockable(_season(phase=SeasonPhase.TOP32_PLAYOFFS))
+    with pytest.raises(SeasonStateError, match="no active season"):
+        season_service.require_lockable(None)
+    assert season_service.require_lockable(_season(phase=SeasonPhase.QUALIFICATION)).phase is SeasonPhase.QUALIFICATION
+
+
+def test_premature_or_repeated_publish_is_rejected() -> None:
+    with pytest.raises(SeasonStateError, match="isn't locked yet"):
+        season_service.require_publishable(_season(phase=SeasonPhase.QUALIFICATION), 5)
+    with pytest.raises(SeasonStateError, match="already published"):
+        season_service.require_publishable(_season(phase=SeasonPhase.TOP32_PLAYOFFS), 5)
+    with pytest.raises(SeasonStateError, match="no squads still qualified"):
+        season_service.require_publishable(_season(phase=SeasonPhase.QUALIFICATION_LOCK), 0)
+    season_service.require_publishable(_season(phase=SeasonPhase.QUALIFICATION_LOCK), 2)
+
+
+@pytest.mark.asyncio
+async def test_new_season_precheck_blocks_locked_season(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        season_service.seasons_repo, "get_active", AsyncMock(return_value=_season(phase=SeasonPhase.QUALIFICATION_LOCK))
+    )
+    with pytest.raises(SeasonStateError):
+        await season_service.precheck_new_season(_FakeConn())  # type: ignore[arg-type]
+    monkeypatch.setattr(season_service.seasons_repo, "get_active", AsyncMock(return_value=None))
+    assert await season_service.precheck_new_season(_FakeConn()) is None  # type: ignore[arg-type]

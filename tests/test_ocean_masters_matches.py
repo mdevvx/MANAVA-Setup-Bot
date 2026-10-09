@@ -4,7 +4,7 @@ bye (uneven bracket) advances automatically without staff action."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -449,3 +449,60 @@ async def test_correct_result_allowed_before_round_advances(monkeypatch: pytest.
     assert kwargs["action"] == "oceanmasters.match.correct_result"
     assert kwargs["old_value"]["winner_squad_id"] == str(a)
     assert kwargs["new_value"]["winner_squad_id"] == str(b)
+
+
+@pytest.mark.asyncio
+async def test_champion_correction_posts_notice_to_premier_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _FakeConn()
+    tid = uuid4()
+    a, b = uuid4(), uuid4()
+    final = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=a, status=MatchStatus.COMPLETED)
+    corrected = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=b, status=MatchStatus.COMPLETED)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_match", AsyncMock(return_value=final))
+    monkeypatch.setattr(
+        ocean_masters_service.ocean_masters_repo,
+        "get_by_id",
+        AsyncMock(return_value=_tournament(status=OceanMastersStatus.COMPLETED)),
+    )
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_round_matches", AsyncMock(return_value=[]))
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "correct_match", AsyncMock(return_value=corrected))
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "set_champion", AsyncMock())
+    monkeypatch.setattr(ocean_masters_service.season_history_repo, "refresh_ocean_masters_standings", AsyncMock())
+    monkeypatch.setattr(ocean_masters_service.audit_repo, "record", AsyncMock())
+    channels = MagicMock()
+    channels.history.send = AsyncMock()
+    channels.brackets.send = AsyncMock()
+
+    await ocean_masters_service.correct_result(
+        conn, final.id, winner_squad_id=b, actor_id=9, reason="wrong champion", channels=channels  # type: ignore[arg-type]
+    )
+
+    channels.history.send.assert_awaited_once()
+    text = channels.history.send.await_args.args[0]
+    assert "Correction" in text and "Bravo" in text and "previously announced: Alpha" in text
+    channels.brackets.send.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mid_bracket_correction_posts_nothing_publicly(monkeypatch: pytest.MonkeyPatch) -> None:
+    conn = _FakeConn()
+    tid = uuid4()
+    a, b, other = uuid4(), uuid4(), uuid4()
+    decided = _match(tournament_id=tid, squad_a_id=a, squad_b_id=b, winner_squad_id=a, status=MatchStatus.COMPLETED)
+    next_match = _match(tournament_id=tid, round_=2, squad_a_id=a, squad_b_id=other)
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_match", AsyncMock(return_value=decided))
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_by_id", AsyncMock(return_value=_tournament()))
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "get_round_matches", AsyncMock(return_value=[next_match]))
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "correct_match", AsyncMock(return_value=decided))
+    monkeypatch.setattr(ocean_masters_service.ocean_masters_repo, "replace_match_squad", AsyncMock(return_value=next_match))
+    monkeypatch.setattr(ocean_masters_service.audit_repo, "record", AsyncMock())
+    channels = MagicMock()
+    channels.history.send = AsyncMock()
+    channels.brackets.send = AsyncMock()
+
+    await ocean_masters_service.correct_result(
+        conn, decided.id, winner_squad_id=b, actor_id=9, reason="wrong side", channels=channels  # type: ignore[arg-type]
+    )
+
+    channels.history.send.assert_not_awaited()
+    channels.brackets.send.assert_not_awaited()

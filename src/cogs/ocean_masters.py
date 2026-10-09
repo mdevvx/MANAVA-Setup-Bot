@@ -455,7 +455,7 @@ def _correction_summary(result: CorrectionResult) -> str:
     winner_name = m.squad_a_name if m.winner_squad_id == m.squad_a_id else m.squad_b_name
     lines = [f"Result corrected: **{winner_name}** is now the winner of this match."]
     if result.champion_changed:
-        lines.append(f"🏆 **{winner_name}** is now the Ocean Masters champion. No public notice was posted.")
+        lines.append(f"🏆 **{winner_name}** is now the Ocean Masters champion — a correction notice was posted in #premier-history.")
     elif result.next_match is not None:
         lines.append(f"They've replaced the other squad in their Round {result.next_match.round} match.")
     return "\n".join(lines)
